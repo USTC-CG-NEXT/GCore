@@ -1,0 +1,67 @@
+#pragma once
+
+#include "GCore/GOP.h"
+#include "GCore/api.h"
+#include "glm/vec2.hpp"
+#include "glm/vec3.hpp"
+
+namespace glm {
+struct ray {
+    glm::vec3 origin;
+    glm::vec3 direction;
+};
+}  // namespace glm
+#ifdef GPU_GEOM_ALGORITHM
+#include "RHI/ResourceManager/resource_allocator.hpp"
+#endif
+
+USTC_CG_NAMESPACE_OPEN_SCOPE
+struct MeshDesc;
+
+struct GEOMETRY_API PointSample {
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec2 uv;
+    unsigned valid;
+};
+
+#ifdef GPU_GEOM_ALGORITHM
+
+GEOMETRY_API void init_gpu_geometry_algorithms();
+GEOMETRY_API void deinit_gpu_geometry_algorithms();
+// Remember to destroy the geometry explicitly with the resource allocator after
+// use.
+GEOMETRY_API ResourceAllocator& get_resource_allocator();
+GEOMETRY_API nvrhi::rt::AccelStructHandle get_geomtry_tlas(
+    const Geometry& geometry,
+    MeshDesc* out_mesh_desc = nullptr,
+    nvrhi::BufferHandle* out_vertex_buffer = nullptr);
+
+GEOMETRY_API std::vector<PointSample> IntersectWithBuffer(
+    const nvrhi::BufferHandle& ray_buffer,
+    size_t ray_count,
+    const Geometry& BaseMesh);
+
+GEOMETRY_API nvrhi::BufferHandle IntersectToBuffer(
+    const nvrhi::BufferHandle& ray_buffer,
+    size_t ray_count,
+    const Geometry& BaseMesh);
+
+GEOMETRY_API std::vector<PointSample> Intersect(
+    const std::vector<glm::ray>& rays,
+    const Geometry& BaseMesh);
+
+GEOMETRY_API std::vector<PointSample> Intersect(
+    const std::vector<glm::vec3>& start_point,
+    const std::vector<glm::vec3>& next_point,
+    const Geometry& BaseMesh);
+
+// result should be of size start_point.size() * next_point.size()
+GEOMETRY_API std::vector<PointSample> IntersectInterweaved(
+    const std::vector<glm::vec3>& start_point,
+    const std::vector<glm::vec3>& next_point,
+    const Geometry& BaseMesh);
+
+#endif
+
+USTC_CG_NAMESPACE_CLOSE_SCOPE

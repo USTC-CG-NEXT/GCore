@@ -1,0 +1,117 @@
+#pragma once
+#include <glm/glm.hpp>
+#include <string>
+
+#include "GCore/Components.h"
+#include "GCore/GOP.h"
+
+USTC_CG_NAMESPACE_OPEN_SCOPE
+struct GEOMETRY_API CurveComponent : public GeometryComponent {
+    explicit CurveComponent(Geometry* attached_operand);
+
+    std::string to_string() const override;
+
+    void apply_transform(const glm::mat4& transform) override
+    {
+        auto vertices = get_vertices();
+        for (auto& vertex : vertices) {
+            vertex = glm::vec3(transform * glm::vec4(vertex, 1.0));
+        }
+        set_vertices(vertices);
+    }
+
+    [[nodiscard]] std::vector<glm::vec3> get_vertices() const
+    {
+        return vertices;
+    }
+
+    void set_vertices(const std::vector<glm::vec3>& vertices)
+    {
+        this->vertices = vertices;
+    }
+
+    [[nodiscard]] std::vector<float> get_width() const
+    {
+        return width;
+    }
+
+    void set_width(const std::vector<float>& width)
+    {
+        this->width = width;
+    }
+
+    [[nodiscard]] std::vector<int> get_vert_count() const
+    {
+        return vert_count;
+    }
+
+    void set_vert_count(const std::vector<int>& vert_count)
+    {
+        this->vert_count = vert_count;
+    }
+
+    [[nodiscard]] std::vector<glm::vec3> get_display_color() const
+    {
+        return displayColor;
+    }
+
+    void set_display_color(const std::vector<glm::vec3>& display_color)
+    {
+        this->displayColor = display_color;
+    }
+
+#if USE_USD_SCRATCH_BUFFER
+    pxr::UsdGeomBasisCurves get_usd_curve() const
+    {
+        return curves;
+    }
+#endif
+
+    [[nodiscard]] bool get_periodic() const
+    {
+        return periodic;
+    }
+
+    void set_periodic(bool is_periodic)
+    {
+        periodic = is_periodic;
+    }
+
+    [[nodiscard]] std::vector<glm::vec3> get_curve_normals() const
+    {
+        return curve_normals;
+    }
+
+    void set_curve_normals(const std::vector<glm::vec3>& normals)
+    {
+        curve_normals = normals;
+    }
+
+    GeometryComponentHandle copy(Geometry* operand) const override;
+
+    enum class CurveType {
+        Linear,
+        Cubic,
+
+    } curve_type = CurveType::Linear;
+    [[nodiscard]] CurveType get_type() const
+    {
+        return curve_type;
+    }
+
+    void set_type(CurveType type)
+    {
+        curve_type = type;
+    }
+
+   private:
+    std::vector<glm::vec3> vertices;
+    std::vector<float> width;
+    std::vector<int> vert_count;
+    std::vector<glm::vec3> displayColor;
+
+    bool periodic = false;
+    std::vector<glm::vec3> curve_normals;
+};
+
+USTC_CG_NAMESPACE_CLOSE_SCOPE

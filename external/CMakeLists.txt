@@ -1,0 +1,29 @@
+add_subdirectory(glm)
+
+set_target_properties(glm PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+set_target_properties(glm PROPERTIES ${OUTPUT_DIR})
+set(GLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/glm" CACHE STRING "")
+target_compile_definitions(glm INTERFACE GLM_ENABLE_EXPERIMENTAL)
+set_target_properties(glm PROPERTIES LINKER_LANGUAGE CXX)
+set_target_properties(glm PROPERTIES FOLDER "ThirdParty")
+
+add_subdirectory(OpenMesh)
+set_target_properties(OpenMeshCore PROPERTIES FOLDER "external")
+set_target_properties(OpenMeshTools PROPERTIES FOLDER "external")
+target_compile_definitions(OpenMeshCore PUBLIC -D_USE_MATH_DEFINES=1)
+
+# libigl
+set(LIBIGL_RESTRICTED_TRIANGLE ON CACHE BOOL "" FORCE)
+add_subdirectory(libigl)
+set_target_properties(igl_core PROPERTIES ${OUTPUT_DIR})
+
+set_target_properties(OpenMeshCore PROPERTIES FOLDER "ThirdParty")
+set_target_properties(OpenMeshTools PROPERTIES FOLDER "ThirdParty")
+set_target_properties(igl_core PROPERTIES FOLDER "ThirdParty")
+
+
+# suppress warnings for third-party libraries
+if(MSVC)
+    target_compile_options(igl_core INTERFACE /wd4244 /wd4267)
+    target_compile_options(triangle PRIVATE /wd4311 /wd4302)
+endif()

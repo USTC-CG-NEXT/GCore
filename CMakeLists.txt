@@ -1,0 +1,35 @@
+add_subdirectory(external)
+
+
+option(ENABLE_GEOM_USD_EXTENSION "Enable USD extension for geometry module" OFF)
+option(ENABLE_GPU_GEOM_ALGORITHM "Enable GPU-based geometry algorithms" OFF)
+
+if(ENABLE_GEOM_USD_EXTENSION)
+set(SKIP_LIST)
+else()
+set(SKIP_LIST usd_extension)
+endif()
+
+USTC_CG_ADD_LIB(
+	geometry 
+	SHARED
+	PUBLIC_LIBS OpenMeshCore spdlog::spdlog nodes_core igl_core triangle::triangle glm::glm
+	COMPILE_DEFS
+		NOMINMAX 
+		USTC_CG_BACKEND_NVRHI
+	SKIP_DIRS
+	    external ${SKIP_LIST}
+)
+
+if(ENABLE_GEOM_USD_EXTENSION)
+	target_compile_definitions(geometry PUBLIC GEOM_USD_EXTENSION=1)
+	target_include_directories(geometry PUBLIC usd_extension/include)
+	target_link_libraries(geometry PUBLIC usd  usdVol hioOpenVDB usdShade usdSkel)
+endif()
+
+if(ENABLE_GPU_GEOM_ALGORITHM)
+	target_compile_definitions(geometry PUBLIC ENABLE_GPU_GEOM_ALGORITHM=1)
+	target_link_libraries(geometry PUBLIC GPUContext shaders_interface)
+endif()
+
+target_compile_definitions(geometry PRIVATE GEOM_COMPUTE_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/algorithms/CS/")

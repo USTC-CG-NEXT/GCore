@@ -1,0 +1,122 @@
+#include "GCore/GOP.h"
+
+#include <spdlog/spdlog.h>
+
+#include <string>
+
+#include "GCore/Components.h"
+#include "GCore/Components/CurveComponent.h"
+#include "GCore/Components/MeshComponent.h"
+#include "GCore/Components/PointsComponent.h"
+#include "GCore/Components/XformComponent.h"
+#ifdef GEOM_USD_EXTENSION
+#include "GCore/Components/VolumeComponent.h"
+#endif
+
+USTC_CG_NAMESPACE_OPEN_SCOPE
+Geometry::Geometry()
+{
+}
+
+Geometry::~Geometry()
+{
+}
+
+void Geometry::apply_transform()
+{
+    auto xform_component = get_component<XformComponent>();
+    if (!xform_component) {
+        return;
+    }
+
+    auto transform = xform_component->get_transform();
+
+    for (auto&& component : components_) {
+        if (component) {
+            component->apply_transform(transform);
+        }
+    }
+}
+
+Geometry::Geometry(const Geometry& operand)
+{
+    *(this) = operand;
+}
+
+Geometry::Geometry(Geometry&& operand) noexcept
+{
+    *(this) = std::move(operand);
+}
+
+Geometry& Geometry::operator=(const Geometry& operand)
+{
+    for (auto&& operand_component : operand.components_) {
+        this->components_.push_back(operand_component->copy(this));
+    }
+
+    return *this;
+}
+
+Geometry& Geometry::operator=(Geometry&& operand) noexcept
+{
+    this->components_ = std::move(operand.components_);
+    return *this;
+}
+
+Geometry Geometry::CreateMesh()
+{
+    Geometry geometry;
+    std::shared_ptr<MeshComponent> mesh =
+        std::make_shared<MeshComponent>(&geometry);
+    geometry.attach_component(mesh);
+    return std::move(geometry);
+}
+
+Geometry Geometry::CreatePoints()
+{
+    Geometry geometry;
+    std::shared_ptr<PointsComponent> points =
+        std::make_shared<PointsComponent>(&geometry);
+    geometry.attach_component(points);
+    return std::move(geometry);
+}
+#ifdef GEOM_USD_EXTENSION
+Geometry Geometry::CreateVolume()
+{
+    Geometry geometry;
+    std::shared_ptr<VolumeComponent> volume =
+        std::make_shared<VolumeComponent>(&geometry);
+    geometry.attach_component(volume);
+    return std::move(geometry);
+}
+#endif
+
+std::string Geometry::to_string() const
+{
+    std::ostringstream out;
+    out << "Contains components:\n";
+    for (auto&& component : components_) {
+        if (component) {
+            out << "    " << component->to_string() << "\n";
+        }
+    }
+    return out.str();
+}
+
+void Geometry::attach_component(const GeometryComponentHandle& component)
+{
+    if (component->get_attached_operand() != this) {
+        spdlog::warn(
+            "A component should never be attached to two operands, unless you "
+            "know what you are doing");
+    }
+    components_.push_back(component);
+}
+
+void Geometry::detach_component(const GeometryComponentHandle& component)
+{
+    auto iter = std::find(components_.begin(), components_.end(), component);
+    components_.erase(iter);
+}
+
+USTC_CG_NAMESPACE_CLOSE_SCOPE
