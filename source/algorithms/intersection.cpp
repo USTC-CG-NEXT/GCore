@@ -10,6 +10,8 @@
 #include "RHI/internal/resources.hpp"
 #include "RHI/rhi.hpp"
 #include "Scene/SceneTypes.slang"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/gtc/type_ptr.hpp"
 #include "nvrhi/nvrhi.h"
 
 USTC_CG_NAMESPACE_OPEN_SCOPE
@@ -50,7 +52,7 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
         return nullptr;
     }
 
-    auto transform = pxr::GfMatrix4d(1.0);
+    auto transform = glm::identity<glm::mat4>();
     auto xform_component = geometry.get_component<XformComponent>();
     if (xform_component) {
         transform = xform_component->get_transform();
@@ -184,7 +186,7 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
 
     memcpy(
         affine_transform,
-        pxr::GfMatrix4f(transform.GetTranspose()).data(),
+        glm::value_ptr(transpose(transform)),
         sizeof(nvrhi::rt::AffineTransform));
 
     instance_desc.setTransform(affine_transform);
@@ -357,7 +359,7 @@ std::vector<PointSample> IntersectWithBuffer(
 }
 
 std::vector<PointSample> Intersect(
-    const std::vector<pxr::GfRay>& rays,
+    const std::vector<glm::ray>& rays,
     const Geometry& BaseMesh)
 {
     init_gpu_geometry_algorithms();
@@ -367,8 +369,8 @@ std::vector<PointSample> Intersect(
     // Create ray buffer with input rays
     auto ray_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
-            .setByteSize(rays.size() * sizeof(pxr::GfRay))
-            .setStructStride(sizeof(pxr::GfRay))
+            .setByteSize(rays.size() * sizeof(glm::ray))
+            .setStructStride(sizeof(glm::ray))
             .setInitialState(nvrhi::ResourceStates::ShaderResource)
             .setKeepInitialState(true)
             .setCpuAccess(nvrhi::CpuAccessMode::Write)
@@ -376,7 +378,7 @@ std::vector<PointSample> Intersect(
 
     // Copy rays to the ray buffer
     void* data = device->mapBuffer(ray_buffer, nvrhi::CpuAccessMode::Write);
-    memcpy(data, rays.data(), rays.size() * sizeof(pxr::GfRay));
+    memcpy(data, rays.data(), rays.size() * sizeof(glm::ray));
     device->unmapBuffer(ray_buffer);
 
     // Call the implementation with the buffer
@@ -393,11 +395,11 @@ std::vector<PointSample> Intersect(
     const std::vector<glm::vec3>& next_point,
     const Geometry& BaseMesh)
 {
-    std::vector<pxr::GfRay> rays;
+    std::vector<glm::ray> rays;
     rays.reserve(start_point.size());
     for (size_t i = 0; i < start_point.size(); ++i) {
         rays.push_back(
-            pxr::GfRay(start_point[i], next_point[i] - start_point[i]));
+            glm::ray(start_point[i], next_point[i] - start_point[i]));
     }
 
     return Intersect(rays, BaseMesh);
@@ -408,12 +410,12 @@ std::vector<PointSample> IntersectInterweaved(
     const std::vector<glm::vec3>& next_point,
     const Geometry& BaseMesh)
 {
-    std::vector<pxr::GfRay> rays;
+    std::vector<glm::ray> rays;
     rays.reserve(start_point.size() * next_point.size());
     for (size_t i = 0; i < start_point.size(); ++i) {
         for (size_t j = 0; j < next_point.size(); ++j) {
             rays.push_back(
-                pxr::GfRay(start_point[i], next_point[j] - start_point[i]));
+                glm::ray(start_point[i], next_point[j] - start_point[i]));
         }
     }
     return Intersect(rays, BaseMesh);

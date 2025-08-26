@@ -8,6 +8,7 @@
 #ifdef GPU_GEOM_ALGORITHM
 
 #include "RHI/rhi.hpp"
+#include "glm/ext/matrix_transform.hpp"
 
 using namespace USTC_CG;
 
@@ -64,15 +65,15 @@ TEST_F(IntersectionTests, BasicRayIntersection)
     Geometry mesh = CreateTriangleMesh();
 
     // Create rays for intersection
-    std::vector<pxr::GfRay> rays;
+    std::vector<glm::ray> rays;
 
     // Ray that should hit the triangle (inside the triangle bounds)
-    rays.push_back(pxr::GfRay(
-        glm::vec3(0.25f, 0.25f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
+    rays.push_back(
+        glm::ray(glm::vec3(0.25f, 0.25f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
 
     // Ray that should miss the triangle
     rays.push_back(
-        pxr::GfRay(glm::vec3(-0.5f, 0.5f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
+        glm::ray(glm::vec3(-0.5f, 0.5f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
 
     // Test intersection
     std::vector<PointSample> samples = Intersect(rays, mesh);
@@ -99,10 +100,10 @@ TEST_F(IntersectionTests, RayParallelToTriangle)
 {
     Geometry mesh = CreateTriangleMesh();
 
-    std::vector<pxr::GfRay> rays;
+    std::vector<glm::ray> rays;
     // Ray parallel to triangle
     rays.push_back(
-        pxr::GfRay(glm::vec3(0.5f, 0.5f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f)));
+        glm::ray(glm::vec3(0.5f, 0.5f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f)));
 
     std::vector<PointSample> samples = Intersect(rays, mesh);
 
@@ -145,13 +146,13 @@ TEST_F(IntersectionTests, MultipleTriangles)
     meshComp->set_normals(normals);
 
     // Create rays for intersection
-    std::vector<pxr::GfRay> rays;
+    std::vector<glm::ray> rays;
     // Hit first triangle
-    rays.push_back(pxr::GfRay(
-        glm::vec3(0.25f, 0.25f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
+    rays.push_back(
+        glm::ray(glm::vec3(0.25f, 0.25f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
     // Hit second triangle
-    rays.push_back(pxr::GfRay(
-        glm::vec3(0.75f, 0.75f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
+    rays.push_back(
+        glm::ray(glm::vec3(0.75f, 0.75f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
 
     std::vector<PointSample> samples = Intersect(rays, mesh);
 
@@ -172,9 +173,9 @@ TEST_F(IntersectionTests, EmptyMesh)
 {
     Geometry mesh = Geometry::CreateMesh();
 
-    std::vector<pxr::GfRay> rays;
+    std::vector<glm::ray> rays;
     rays.push_back(
-        pxr::GfRay(glm::vec3(0.5f, 0.5f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
+        glm::ray(glm::vec3(0.5f, 0.5f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
 
     std::vector<PointSample> samples = Intersect(rays, mesh);
 
@@ -189,12 +190,13 @@ TEST_F(IntersectionTests, TransformedMesh)
 
     // Apply a transform to the mesh (move it to z=-1)
     glm::mat4 transform;
-    transform.SetTranslate(pxr::GfVec3d(0.0, 0.0, -1.0));
+    transform =
+        glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, -1.0));
     meshComp->apply_transform(transform);
 
-    std::vector<pxr::GfRay> rays;
+    std::vector<glm::ray> rays;
     rays.push_back(
-        pxr::GfRay(glm::vec3(0.5f, 0.5f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
+        glm::ray(glm::vec3(0.5f, 0.5f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
 
     std::vector<PointSample> samples = Intersect(rays, mesh);
 

@@ -28,7 +28,7 @@ if(ENABLE_GEOM_USD_EXTENSION)
 endif()
 
 if(ENABLE_GPU_GEOM_ALGORITHM)
-	target_compile_definitions(geometry PUBLIC ENABLE_GPU_GEOM_ALGORITHM=1)
+	target_compile_definitions(geometry PUBLIC GPU_GEOM_ALGORITHM=1)
 	target_link_libraries(geometry PUBLIC GPUContext shaders_interface)
 endif()
 
