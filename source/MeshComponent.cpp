@@ -61,16 +61,6 @@ GeometryComponentHandle MeshComponent::copy(Geometry* operand) const
     ret->set_display_color(this->displayColor);
     ret->set_texcoords_array(this->texcoordsArray);
 #endif
-    ret->set_vertex_scalar_quantities(this->vertex_scalar_quantities);
-    ret->set_face_scalar_quantities(this->face_scalar_quantities);
-    ret->set_vertex_color_quantities(this->vertex_color_quantities);
-    ret->set_face_color_quantities(this->face_color_quantities);
-    ret->set_vertex_vector_quantities(this->vertex_vector_quantities);
-    ret->set_face_vector_quantities(this->face_vector_quantities);
-    ret->set_face_corner_parameterization_quantities(
-        this->face_corner_parameterization_quantities);
-    ret->set_vertex_parameterization_quantities(
-        this->vertex_parameterization_quantities);
     return ret;
 }
 

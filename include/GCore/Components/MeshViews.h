@@ -45,24 +45,6 @@ struct GEOMETRY_API ConstMeshIGLView {
     // Display colors as Nx3 matrix
     Eigen::MatrixXf get_display_colors() const;
 
-    // Get scalar quantities
-    Eigen::VectorXf get_vertex_scalar_quantity(const std::string& name) const;
-    Eigen::VectorXf get_face_scalar_quantity(const std::string& name) const;
-
-    // Get vector quantities
-    Eigen::MatrixXf get_vertex_vector_quantity(const std::string& name) const;
-    Eigen::MatrixXf get_face_vector_quantity(const std::string& name) const;
-
-    // Get color quantities
-    Eigen::MatrixXf get_vertex_color_quantity(const std::string& name) const;
-    Eigen::MatrixXf get_face_color_quantity(const std::string& name) const;
-
-    // Get parameterization quantities
-    Eigen::MatrixXf get_vertex_parameterization_quantity(
-        const std::string& name) const;
-    Eigen::MatrixXf get_face_corner_parameterization_quantity(
-        const std::string& name) const;
-
    protected:
     const MeshComponent& mesh_;
 
@@ -100,38 +82,6 @@ struct GEOMETRY_API MeshIGLView : public ConstMeshIGLView {
     // Set display colors from Nx3 matrix
     void set_display_colors(const Eigen::MatrixXf& colors);
 
-    // Set scalar quantities
-    void set_vertex_scalar_quantity(
-        const std::string& name,
-        const Eigen::VectorXf& values);
-    void set_face_scalar_quantity(
-        const std::string& name,
-        const Eigen::VectorXf& values);
-
-    // Set vector quantities
-    void set_vertex_vector_quantity(
-        const std::string& name,
-        const Eigen::MatrixXf& vectors);
-    void set_face_vector_quantity(
-        const std::string& name,
-        const Eigen::MatrixXf& vectors);
-
-    // Set color quantities
-    void set_vertex_color_quantity(
-        const std::string& name,
-        const Eigen::MatrixXf& colors);
-    void set_face_color_quantity(
-        const std::string& name,
-        const Eigen::MatrixXf& colors);
-
-    // Set parameterization quantities
-    void set_vertex_parameterization_quantity(
-        const std::string& name,
-        const Eigen::MatrixXf& params);
-    void set_face_corner_parameterization_quantity(
-        const std::string& name,
-        const Eigen::MatrixXf& params);
-
    private:
     MeshComponent& mutable_mesh_;
 
@@ -166,29 +116,6 @@ struct GEOMETRY_API ConstMeshUSDView {
     // Get display colors as VtArray
     pxr::VtArray<pxr::GfVec3f> get_display_colors() const;
 
-    // Get scalar quantities
-    pxr::VtArray<float> get_vertex_scalar_quantity(
-        const std::string& name) const;
-    pxr::VtArray<float> get_face_scalar_quantity(const std::string& name) const;
-
-    // Get vector quantities
-    pxr::VtArray<pxr::GfVec3f> get_vertex_vector_quantity(
-        const std::string& name) const;
-    pxr::VtArray<pxr::GfVec3f> get_face_vector_quantity(
-        const std::string& name) const;
-
-    // Get color quantities
-    pxr::VtArray<pxr::GfVec3f> get_vertex_color_quantity(
-        const std::string& name) const;
-    pxr::VtArray<pxr::GfVec3f> get_face_color_quantity(
-        const std::string& name) const;
-
-    // Get parameterization quantities
-    pxr::VtArray<pxr::GfVec2f> get_vertex_parameterization_quantity(
-        const std::string& name) const;
-    pxr::VtArray<pxr::GfVec2f> get_face_corner_parameterization_quantity(
-        const std::string& name) const;
-
    protected:
     const MeshComponent& mesh_;
 
@@ -222,38 +149,6 @@ struct GEOMETRY_API MeshUSDView : public ConstMeshUSDView {
 
     // Set display colors from VtArray
     void set_display_colors(const pxr::VtArray<pxr::GfVec3f>& colors);
-
-    // Set scalar quantities
-    void set_vertex_scalar_quantity(
-        const std::string& name,
-        const pxr::VtArray<float>& values);
-    void set_face_scalar_quantity(
-        const std::string& name,
-        const pxr::VtArray<float>& values);
-
-    // Set vector quantities
-    void set_vertex_vector_quantity(
-        const std::string& name,
-        const pxr::VtArray<pxr::GfVec3f>& vectors);
-    void set_face_vector_quantity(
-        const std::string& name,
-        const pxr::VtArray<pxr::GfVec3f>& vectors);
-
-    // Set color quantities
-    void set_vertex_color_quantity(
-        const std::string& name,
-        const pxr::VtArray<pxr::GfVec3f>& colors);
-    void set_face_color_quantity(
-        const std::string& name,
-        const pxr::VtArray<pxr::GfVec3f>& colors);
-
-    // Set parameterization quantities
-    void set_vertex_parameterization_quantity(
-        const std::string& name,
-        const pxr::VtArray<pxr::GfVec2f>& params);
-    void set_face_corner_parameterization_quantity(
-        const std::string& name,
-        const pxr::VtArray<pxr::GfVec2f>& params);
 
    private:
     MeshComponent& mutable_mesh_;

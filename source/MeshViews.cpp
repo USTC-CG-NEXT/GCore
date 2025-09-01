@@ -68,56 +68,6 @@ Eigen::MatrixXf ConstMeshIGLView::get_display_colors() const
     return vec3f_array_to_matrix(mesh_.get_display_color());
 }
 
-Eigen::VectorXf ConstMeshIGLView::get_vertex_scalar_quantity(
-    const std::string& name) const
-{
-    return float_array_to_vector(mesh_.get_vertex_scalar_quantity(name));
-}
-
-Eigen::VectorXf ConstMeshIGLView::get_face_scalar_quantity(
-    const std::string& name) const
-{
-    return float_array_to_vector(mesh_.get_face_scalar_quantity(name));
-}
-
-Eigen::MatrixXf ConstMeshIGLView::get_vertex_vector_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_matrix(mesh_.get_vertex_vector_quantity(name));
-}
-
-Eigen::MatrixXf ConstMeshIGLView::get_face_vector_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_matrix(mesh_.get_face_vector_quantity(name));
-}
-
-Eigen::MatrixXf ConstMeshIGLView::get_vertex_color_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_matrix(mesh_.get_vertex_color_quantity(name));
-}
-
-Eigen::MatrixXf ConstMeshIGLView::get_face_color_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_matrix(mesh_.get_face_color_quantity(name));
-}
-
-Eigen::MatrixXf ConstMeshIGLView::get_vertex_parameterization_quantity(
-    const std::string& name) const
-{
-    return vec2f_array_to_matrix(
-        mesh_.get_vertex_parameterization_quantity(name));
-}
-
-Eigen::MatrixXf ConstMeshIGLView::get_face_corner_parameterization_quantity(
-    const std::string& name) const
-{
-    return vec2f_array_to_matrix(
-        mesh_.get_face_corner_parameterization_quantity(name));
-}
-
 // Utility functions for ConstMeshIGLView
 Eigen::MatrixXf ConstMeshIGLView::vec3f_array_to_matrix(
     const std::vector<glm::vec3>& array)
@@ -221,68 +171,6 @@ void MeshIGLView::set_display_colors(const Eigen::MatrixXf& colors)
     mutable_mesh_.set_display_color(matrix_to_vec3f_array(colors));
 }
 
-void MeshIGLView::set_vertex_scalar_quantity(
-    const std::string& name,
-    const Eigen::VectorXf& values)
-{
-    mutable_mesh_.add_vertex_scalar_quantity(
-        name, vector_to_float_array(values));
-}
-
-void MeshIGLView::set_face_scalar_quantity(
-    const std::string& name,
-    const Eigen::VectorXf& values)
-{
-    mutable_mesh_.add_face_scalar_quantity(name, vector_to_float_array(values));
-}
-
-void MeshIGLView::set_vertex_vector_quantity(
-    const std::string& name,
-    const Eigen::MatrixXf& vectors)
-{
-    mutable_mesh_.add_vertex_vector_quantity(
-        name, matrix_to_vec3f_array(vectors));
-}
-
-void MeshIGLView::set_face_vector_quantity(
-    const std::string& name,
-    const Eigen::MatrixXf& vectors)
-{
-    mutable_mesh_.add_face_vector_quantity(
-        name, matrix_to_vec3f_array(vectors));
-}
-
-void MeshIGLView::set_vertex_color_quantity(
-    const std::string& name,
-    const Eigen::MatrixXf& colors)
-{
-    mutable_mesh_.add_vertex_color_quantity(
-        name, matrix_to_vec3f_array(colors));
-}
-
-void MeshIGLView::set_face_color_quantity(
-    const std::string& name,
-    const Eigen::MatrixXf& colors)
-{
-    mutable_mesh_.add_face_color_quantity(name, matrix_to_vec3f_array(colors));
-}
-
-void MeshIGLView::set_vertex_parameterization_quantity(
-    const std::string& name,
-    const Eigen::MatrixXf& params)
-{
-    mutable_mesh_.add_vertex_parameterization_quantity(
-        name, matrix_to_vec2f_array(params));
-}
-
-void MeshIGLView::set_face_corner_parameterization_quantity(
-    const std::string& name,
-    const Eigen::MatrixXf& params)
-{
-    mutable_mesh_.add_face_corner_parameterization_quantity(
-        name, matrix_to_vec2f_array(params));
-}
-
 // Utility functions for MeshIGLView
 std::vector<glm::vec3> MeshIGLView::matrix_to_vec3f_array(
     const Eigen::MatrixXf& matrix)
@@ -366,58 +254,6 @@ pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_display_colors() const
     return vec3f_array_to_vt_array(mesh_.get_display_color());
 }
 
-pxr::VtArray<float> ConstMeshUSDView::get_vertex_scalar_quantity(
-    const std::string& name) const
-{
-    return float_array_to_vt_array(mesh_.get_vertex_scalar_quantity(name));
-}
-
-pxr::VtArray<float> ConstMeshUSDView::get_face_scalar_quantity(
-    const std::string& name) const
-{
-    return float_array_to_vt_array(mesh_.get_face_scalar_quantity(name));
-}
-
-pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_vertex_vector_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_vt_array(mesh_.get_vertex_vector_quantity(name));
-}
-
-pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_face_vector_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_vt_array(mesh_.get_face_vector_quantity(name));
-}
-
-pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_vertex_color_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_vt_array(mesh_.get_vertex_color_quantity(name));
-}
-
-pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_face_color_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_vt_array(mesh_.get_face_color_quantity(name));
-}
-
-pxr::VtArray<pxr::GfVec2f>
-ConstMeshUSDView::get_vertex_parameterization_quantity(
-    const std::string& name) const
-{
-    return vec2f_array_to_vt_array(
-        mesh_.get_vertex_parameterization_quantity(name));
-}
-
-pxr::VtArray<pxr::GfVec2f>
-ConstMeshUSDView::get_face_corner_parameterization_quantity(
-    const std::string& name) const
-{
-    return vec2f_array_to_vt_array(
-        mesh_.get_face_corner_parameterization_quantity(name));
-}
-
 // Utility functions for ConstMeshUSDView
 pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::vec3f_array_to_vt_array(
     const std::vector<glm::vec3>& array)
@@ -491,70 +327,6 @@ void MeshUSDView::set_uv_coordinates(
 void MeshUSDView::set_display_colors(const pxr::VtArray<pxr::GfVec3f>& colors)
 {
     mutable_mesh_.set_display_color(vt_array_to_vec3f_array(colors));
-}
-
-void MeshUSDView::set_vertex_scalar_quantity(
-    const std::string& name,
-    const pxr::VtArray<float>& values)
-{
-    mutable_mesh_.add_vertex_scalar_quantity(
-        name, vt_array_to_float_array(values));
-}
-
-void MeshUSDView::set_face_scalar_quantity(
-    const std::string& name,
-    const pxr::VtArray<float>& values)
-{
-    mutable_mesh_.add_face_scalar_quantity(
-        name, vt_array_to_float_array(values));
-}
-
-void MeshUSDView::set_vertex_vector_quantity(
-    const std::string& name,
-    const pxr::VtArray<pxr::GfVec3f>& vectors)
-{
-    mutable_mesh_.add_vertex_vector_quantity(
-        name, vt_array_to_vec3f_array(vectors));
-}
-
-void MeshUSDView::set_face_vector_quantity(
-    const std::string& name,
-    const pxr::VtArray<pxr::GfVec3f>& vectors)
-{
-    mutable_mesh_.add_face_vector_quantity(
-        name, vt_array_to_vec3f_array(vectors));
-}
-
-void MeshUSDView::set_vertex_color_quantity(
-    const std::string& name,
-    const pxr::VtArray<pxr::GfVec3f>& colors)
-{
-    mutable_mesh_.add_vertex_color_quantity(
-        name, vt_array_to_vec3f_array(colors));
-}
-
-void MeshUSDView::set_face_color_quantity(
-    const std::string& name,
-    const pxr::VtArray<pxr::GfVec3f>& colors)
-{
-    mutable_mesh_.add_face_color_quantity(
-        name, vt_array_to_vec3f_array(colors));
-}
-
-void MeshUSDView::set_vertex_parameterization_quantity(
-    const std::string& name,
-    const pxr::VtArray<pxr::GfVec2f>& params)
-{
-    mutable_mesh_.add_vertex_parameterization_quantity(
-        name, vt_array_to_vec2f_array(params));
-}
-
-void MeshUSDView::set_face_corner_parameterization_quantity(
-    const std::string& name,
-    const pxr::VtArray<pxr::GfVec2f>& params)
-{
-    mutable_mesh_.add_face_corner_parameterization_quantity(
-        name, vt_array_to_vec2f_array(params));
 }
 
 // Utility functions for MeshUSDView
