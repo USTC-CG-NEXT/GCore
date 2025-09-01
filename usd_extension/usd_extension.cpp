@@ -395,10 +395,11 @@ bool write_geometry_to_usd(
             xform_component->rotation.size());
         glm::mat4 final_transform = xform_component->get_transform();
         pxr::GfMatrix4d usd_transform;
-        std::memcpy(
-            usd_transform.GetArray(),
-            glm::value_ptr(final_transform),
-            sizeof(glm::mat4));
+        const float* src = glm::value_ptr(final_transform);
+        double* dst = usd_transform.GetArray();
+        for (int i = 0; i < 16; ++i) {
+            dst[i] = static_cast<double>(src[i]);
+        }
         xform_op.Set(usd_transform, time);
     }
     else {
