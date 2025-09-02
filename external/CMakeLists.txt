@@ -27,3 +27,7 @@ if(MSVC)
     target_compile_options(igl_core INTERFACE /wd4244 /wd4267)
     target_compile_options(triangle PRIVATE /wd4311 /wd4302)
 endif()
+
+add_subdirectory(OpenVolumeMesh)
+set_target_properties(OpenVolumeMesh PROPERTIES FOLDER "ThirdParty")
+set_target_properties(OpenVolumeMesh PROPERTIES ${OUTPUT_DIR})
