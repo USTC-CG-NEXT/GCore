@@ -147,7 +147,7 @@ bool write_geometry_to_usd(
                  mesh->get_vertex_scalar_quantity_names()) {
                 auto values = mesh_usdview.get_vertex_scalar_quantity(name);
                 const std::string primvar_name =
-                    "polyscope:vertex:scalar:" + name;
+                    "vertex:scalar:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->FloatArray);
@@ -159,7 +159,7 @@ bool write_geometry_to_usd(
                  mesh->get_face_scalar_quantity_names()) {
                 auto values = mesh_usdview.get_face_scalar_quantity(name);
                 const std::string primvar_name =
-                    "polyscope:face:scalar:" + name;
+                    "face:scalar:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->FloatArray);
@@ -170,7 +170,7 @@ bool write_geometry_to_usd(
             for (std::string& name : mesh->get_vertex_color_quantity_names()) {
                 auto values = mesh_usdview.get_vertex_color_quantity(name);
                 const std::string primvar_name =
-                    "polyscope:vertex:color:" + name;
+                    "vertex:color:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->Color3fArray);
@@ -181,7 +181,7 @@ bool write_geometry_to_usd(
             for (const std::string& name :
                  mesh->get_face_color_quantity_names()) {
                 auto values = mesh_usdview.get_face_color_quantity(name);
-                const std::string primvar_name = "polyscope:face:color:" + name;
+                const std::string primvar_name = "face:color:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->Color3fArray);
@@ -193,7 +193,7 @@ bool write_geometry_to_usd(
                  mesh->get_vertex_vector_quantity_names()) {
                 auto values = mesh_usdview.get_vertex_vector_quantity(name);
                 const std::string primvar_name =
-                    "polyscope:vertex:vector:" + name;
+                    "vertex:vector:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->Vector3fArray);
@@ -205,7 +205,7 @@ bool write_geometry_to_usd(
                  mesh->get_face_vector_quantity_names()) {
                 auto values = mesh_usdview.get_face_vector_quantity(name);
                 const std::string primvar_name =
-                    "polyscope:face:vector:" + name;
+                    "face:vector:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->Vector3fArray);
@@ -219,7 +219,7 @@ bool write_geometry_to_usd(
                     mesh_usdview.get_face_corner_parameterization_quantity(
                         name);
                 const std::string primvar_name =
-                    "polyscope:face_corner:parameterization:" + name;
+                    "face_corner:parameterization:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->TexCoord2fArray);
@@ -232,7 +232,7 @@ bool write_geometry_to_usd(
                 auto values =
                     mesh_usdview.get_vertex_parameterization_quantity(name);
                 const std::string primvar_name =
-                    "polyscope:vertex:parameterization:" + name;
+                    "vertex:parameterization:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->TexCoord2fArray);

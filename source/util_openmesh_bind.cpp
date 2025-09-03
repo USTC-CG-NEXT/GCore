@@ -1,6 +1,7 @@
 #include "GCore/util_openmesh_bind.h"
 
 #include "GCore/Components/MeshComponent.h"
+
 USTC_CG_NAMESPACE_OPEN_SCOPE
 std::shared_ptr<PolyMesh> operand_to_openmesh(Geometry* mesh_oeprand)
 {
@@ -244,108 +245,231 @@ std::shared_ptr<Geometry> openmesh_to_operand(PolyMesh* openmesh)
     return geometry;
 }
 
+// Optimized tetrahedral mesh reconstruction helpers
+namespace {
+// Fast hash function for triangle sorting
+inline uint64_t hash_triangle(int v0, int v1, int v2)
+{
+    // Sort vertices
+    if (v0 > v1)
+        std::swap(v0, v1);
+    if (v1 > v2)
+        std::swap(v1, v2);
+    if (v0 > v1)
+        std::swap(v0, v1);
+
+    return (static_cast<uint64_t>(v0) << 42) |
+           (static_cast<uint64_t>(v1) << 21) | static_cast<uint64_t>(v2);
+}
+
+// Fast tetrahedral reconstruction using hash maps - moved before
+// operand_to_openvolulemesh
+void fast_tetrahedral_reconstruction(
+    const std::vector<std::array<int, 3>>& triangles,
+    std::shared_ptr<OpenVolumeMesh::GeometricTetrahedralMeshV3d> volumemesh)
+{
+    if (triangles.size() < 4)
+        return;
+
+    // Build triangle hash map for O(1) lookup
+    std::unordered_set<uint64_t> triangle_set;
+    triangle_set.reserve(triangles.size());
+
+    for (const auto& tri : triangles) {
+        triangle_set.insert(hash_triangle(tri[0], tri[1], tri[2]));
+    }
+
+    std::unordered_set<uint64_t> processed_tets;
+
+    // Enhanced algorithm: use edge-based approach for better handling of
+    // adjacent tetrahedra
+    std::unordered_map<uint64_t, std::vector<size_t>> edge_to_triangles;
+
+    auto encode_edge = [](int v1, int v2) -> uint64_t {
+        if (v1 > v2)
+            std::swap(v1, v2);
+        return (static_cast<uint64_t>(v1) << 32) | static_cast<uint64_t>(v2);
+    };
+
+    // Build edge-to-triangles mapping
+    for (size_t i = 0; i < triangles.size(); i++) {
+        const auto& tri = triangles[i];
+        for (int j = 0; j < 3; j++) {
+            int v1 = tri[j];
+            int v2 = tri[(j + 1) % 3];
+            uint64_t edge_key = encode_edge(v1, v2);
+            edge_to_triangles[edge_key].push_back(i);
+        }
+    }
+
+    // For each triangle, try to find tetrahedra
+    for (size_t i = 0; i < triangles.size(); i++) {
+        const auto& base_tri = triangles[i];
+        std::unordered_set<int> candidate_vertices;
+
+        // Find candidate fourth vertices through edge adjacency
+        for (int j = 0; j < 3; j++) {
+            int v1 = base_tri[j];
+            int v2 = base_tri[(j + 1) % 3];
+            uint64_t edge_key = encode_edge(v1, v2);
+
+            auto it = edge_to_triangles.find(edge_key);
+            if (it != edge_to_triangles.end()) {
+                for (size_t adj_tri_idx : it->second) {
+                    if (adj_tri_idx != i) {
+                        const auto& adj_tri = triangles[adj_tri_idx];
+                        for (int k = 0; k < 3; k++) {
+                            int vertex = adj_tri[k];
+                            if (vertex != v1 && vertex != v2) {
+                                candidate_vertices.insert(vertex);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Test each candidate to see if it forms a valid tetrahedron
+        for (int fourth_vertex : candidate_vertices) {
+            std::vector<int> tet_verts = {
+                base_tri[0], base_tri[1], base_tri[2], fourth_vertex
+            };
+            std::sort(tet_verts.begin(), tet_verts.end());
+
+            // Hash for duplicate checking
+            uint64_t tet_hash = 0;
+            for (int v : tet_verts) {
+                tet_hash = tet_hash * 1000003ULL + static_cast<uint64_t>(v);
+            }
+
+            if (processed_tets.count(tet_hash))
+                continue;
+
+            // Check if all 4 faces exist
+            bool valid_tet = true;
+            std::vector<std::array<int, 3>> faces = {
+                { tet_verts[0], tet_verts[1], tet_verts[2] },
+                { tet_verts[0], tet_verts[1], tet_verts[3] },
+                { tet_verts[0], tet_verts[2], tet_verts[3] },
+                { tet_verts[1], tet_verts[2], tet_verts[3] }
+            };
+
+            for (const auto& face : faces) {
+                if (triangle_set.find(hash_triangle(
+                        face[0], face[1], face[2])) == triangle_set.end()) {
+                    valid_tet = false;
+                    break;
+                }
+            }
+
+            if (valid_tet) {
+                processed_tets.insert(tet_hash);
+
+                std::vector<OpenVolumeMesh::VertexHandle> tet_handles;
+                for (int v : tet_verts) {
+                    tet_handles.push_back(OpenVolumeMesh::VertexHandle(v));
+                }
+                volumemesh->add_cell(tet_handles);
+            }
+        }
+    }
+}
+}  // namespace
+
 std::shared_ptr<VolumeMesh> operand_to_openvolulemesh(Geometry* mesh_operand)
 {
     auto volumemesh = std::make_shared<VolumeMesh>();
+    if (!mesh_operand)
+        return volumemesh;
+
     auto topology = mesh_operand->get_component<MeshComponent>();
+    if (!topology)
+        return volumemesh;
 
     // Get mesh data
     const auto& vertices = topology->get_vertices();
-
-    // Add vertices to volume mesh
-    for (const auto& vv : vertices) {
-        VolumeMesh::PointT point(vv[0], vv[1], vv[2]);
-        volumemesh->add_vertex(point);
-    }
-
     auto faceVertexIndices = topology->get_face_vertex_indices();
     auto faceVertexCounts = topology->get_face_vertex_counts();
 
-    // For tetrahedral mesh construction from triangle faces, we need to assume
-    // a specific data format or use tetrahedralization algorithms
-
-    // Check what type of data we have
-    bool allTriangles = true;
-    bool hasTetrahedra = false;
-
-    for (size_t i = 0; i < faceVertexCounts.size(); i++) {
-        if (faceVertexCounts[i] != 3)
-            allTriangles = false;
-        if (faceVertexCounts[i] == 4)
-            hasTetrahedra = true;
+    if (vertices.empty() || faceVertexIndices.empty()) {
+        return volumemesh;
     }
 
-    if (hasTetrahedra && !allTriangles) {
-        // Special case: Data actually represents tetrahedra as 4-vertex "faces"
-        size_t vertexIndex = 0;
-        for (size_t i = 0; i < faceVertexCounts.size(); i++) {
-            if (faceVertexCounts[i] == 4) {
-                std::vector<OpenVolumeMesh::VertexHandle> tet_vertices;
-                for (int j = 0; j < 4; j++) {
-                    int index = faceVertexIndices[vertexIndex + j];
-                    tet_vertices.push_back(OpenVolumeMesh::VertexHandle(index));
-                }
-                volumemesh->add_cell(tet_vertices);
-            }
-            vertexIndex += faceVertexCounts[i];
-        }
-    }
-    else if (allTriangles) {
-        // Standard case: Triangle faces representing surface mesh
-        // We need a different approach here:
-        // Option 1: Assume this is boundary of tetrahedral mesh and we need
-        //           additional tetrahedral connectivity data
-        // Option 2: Apply Delaunay tetrahedralization
-        // Option 3: Assume specific data encoding
-
-        // For now, we'll assume the MeshComponent actually stores tetrahedral
-        // connectivity in a non-standard way, or we create a simple example
-
-        // Simple fallback: if we have exactly 4 vertices, create one
-        // tetrahedron
-        if (vertices.size() == 4 && faceVertexCounts.size() == 4) {
-            // Assume the 4 triangular faces define a single tetrahedron
-            std::vector<OpenVolumeMesh::VertexHandle> tet_vertices;
-            for (size_t i = 0; i < 4; i++) {
-                tet_vertices.push_back(OpenVolumeMesh::VertexHandle(i));
-            }
-            volumemesh->add_cell(tet_vertices);
-        }
-        else {
-            // TODO: Implement proper tetrahedralization
-            // For now, throw an error or warning
-            // This requires additional tetrahedral connectivity information
-            // that's not available in the standard triangle face representation
-        }
-    }
-
-    return volumemesh;
-}
-
-std::shared_ptr<VolumeMesh> operand_to_openvolulemesh_with_tets(
-    Geometry* mesh_operand,
-    const std::vector<std::array<int, 4>>& tetrahedral_indices)
-{
-    auto volumemesh = std::make_shared<VolumeMesh>();
-    auto topology = mesh_operand->get_component<MeshComponent>();
-
-    // Get mesh data
-    const auto& vertices = topology->get_vertices();
-
-    // Add vertices to volume mesh
+    // Add vertices to volume mesh first
     for (const auto& vv : vertices) {
         VolumeMesh::PointT point(vv[0], vv[1], vv[2]);
         volumemesh->add_vertex(point);
     }
 
-    // Add tetrahedra using explicit connectivity
-    for (const auto& tet : tetrahedral_indices) {
+    // Check if input represents tetrahedra as 4-vertex "faces" (cells)
+    bool allQuads = true;
+    for (const auto& count : faceVertexCounts) {
+        if (count != 4) {
+            allQuads = false;
+            break;
+        }
+    }
+
+    if (allQuads && !faceVertexCounts.empty()) {
+        // Fast path: Input data represents tetrahedra as 4-vertex cells
+        size_t vertexIndex = 0;
+        for (size_t i = 0; i < faceVertexCounts.size(); i++) {
+            std::vector<OpenVolumeMesh::VertexHandle> tet_vertices;
+            tet_vertices.reserve(4);
+
+            bool valid_tet = true;
+            for (int j = 0; j < 4; j++) {
+                int index = faceVertexIndices[vertexIndex + j];
+                if (index >= 0 && index < static_cast<int>(vertices.size())) {
+                    tet_vertices.push_back(OpenVolumeMesh::VertexHandle(index));
+                }
+                else {
+                    valid_tet = false;
+                    break;
+                }
+            }
+
+            if (valid_tet && tet_vertices.size() == 4) {
+                volumemesh->add_cell(tet_vertices);
+            }
+            vertexIndex += 4;
+        }
+        return volumemesh;
+    }
+
+    // Handle triangular faces - direct approach without OpenMesh intermediate
+    std::vector<std::array<int, 3>> triangles;
+    triangles.reserve(faceVertexCounts.size());
+
+    size_t vertexIndex = 0;
+    for (size_t i = 0; i < faceVertexCounts.size(); i++) {
+        if (faceVertexCounts[i] == 3) {
+            triangles.push_back(
+                { faceVertexIndices[vertexIndex],
+                  faceVertexIndices[vertexIndex + 1],
+                  faceVertexIndices[vertexIndex + 2] });
+        }
+        vertexIndex += faceVertexCounts[i];
+    }
+
+    if (triangles.empty()) {
+        return volumemesh;
+    }
+
+    // Special case: single tetrahedron (4 triangles, 4 vertices)
+    if (triangles.size() == 4 && vertices.size() == 4) {
         std::vector<OpenVolumeMesh::VertexHandle> tet_vertices;
-        for (int i = 0; i < 4; i++) {
-            tet_vertices.push_back(OpenVolumeMesh::VertexHandle(tet[i]));
+        for (size_t k = 0; k < 4; k++) {
+            tet_vertices.push_back(
+                OpenVolumeMesh::VertexHandle(static_cast<int>(k)));
         }
         volumemesh->add_cell(tet_vertices);
+        return volumemesh;
     }
+
+    // Use direct tetrahedral reconstruction (more robust than OpenMesh
+    // approach)
+    fast_tetrahedral_reconstruction(triangles, volumemesh);
 
     return volumemesh;
 }
@@ -389,206 +513,73 @@ std::shared_ptr<Geometry> openvolulemesh_to_operand(VolumeMesh* volumemesh)
     return geometry;
 }
 
-std::shared_ptr<PolyhedralVolumeMesh> operand_to_polyhedralmesh(
-    Geometry* mesh_operand)
-{
-    auto polymesh = std::make_shared<PolyhedralVolumeMesh>();
-    auto topology = mesh_operand->get_component<MeshComponent>();
-
-    // Get mesh data
-    const auto& vertices = topology->get_vertices();
-
-    // Add vertices to polyhedral mesh
-    for (const auto& vv : vertices) {
-        PolyhedralVolumeMesh::PointT point(vv[0], vv[1], vv[2]);
-        polymesh->add_vertex(point);
-    }
-
-    // Get face data - these could represent faces of polyhedral cells
-    auto faceVertexIndices = topology->get_face_vertex_indices();
-    auto faceVertexCounts = topology->get_face_vertex_counts();
-
-    // For PolyhedralMesh, we need to build faces first, then cells
-    std::vector<OpenVolumeMesh::FaceHandle> faces;
-
-    size_t vertexIndex = 0;
-    for (size_t i = 0; i < faceVertexCounts.size(); i++) {
-        std::vector<OpenVolumeMesh::VertexHandle> face_vertices;
-        for (int j = 0; j < faceVertexCounts[i]; j++) {
-            int index = faceVertexIndices[vertexIndex + j];
-            face_vertices.push_back(OpenVolumeMesh::VertexHandle(index));
-        }
-
-        // Add face to mesh
-        auto face_handle = polymesh->add_face(face_vertices);
-        if (face_handle.is_valid()) {
-            faces.push_back(face_handle);
-        }
-
-        vertexIndex += faceVertexCounts[i];
-    }
-
-    // TODO: Add logic to group faces into polyhedral cells
-    // For now, we assume each face is part of a single cell
-    // This needs more sophisticated logic based on your data structure
-
-    return polymesh;
-}
-
-std::shared_ptr<Geometry> polyhedralmesh_to_operand(
-    PolyhedralVolumeMesh* polyhedralmesh)
-{
-    auto geometry = std::make_shared<Geometry>();
-    std::shared_ptr<MeshComponent> mesh =
-        std::make_shared<MeshComponent>(geometry.get());
-    geometry->attach_component(mesh);
-
-    std::vector<glm::vec3> points;
-    std::vector<int> faceVertexIndices;
-    std::vector<int> faceVertexCounts;
-
-    // Extract vertices
-    for (auto v_it = polyhedralmesh->vertices_begin();
-         v_it != polyhedralmesh->vertices_end();
-         ++v_it) {
-        const auto& point = polyhedralmesh->vertex(*v_it);
-        points.push_back(glm::vec3(point[0], point[1], point[2]));
-    }
-
-    // Extract faces from polyhedral mesh
-    for (auto f_it = polyhedralmesh->faces_begin();
-         f_it != polyhedralmesh->faces_end();
-         ++f_it) {
-        std::vector<OpenVolumeMesh::VertexHandle> face_vertices;
-
-        // Get face vertices through face-vertex iteration
-        for (auto fv_it = polyhedralmesh->fv_iter(*f_it); fv_it.valid();
-             ++fv_it) {
-            face_vertices.push_back(*fv_it);
-        }
-
-        faceVertexCounts.push_back(face_vertices.size());
-
-        for (const auto& fv : face_vertices) {
-            faceVertexIndices.push_back(fv.idx());
-        }
-    }
-
-    mesh->set_vertices(points);
-    mesh->set_face_vertex_indices(faceVertexIndices);
-    mesh->set_face_vertex_counts(faceVertexCounts);
-
-    return geometry;
-}
-
-std::shared_ptr<VolumeMesh> operand_to_openvolulemesh_from_faces(
-    Geometry* mesh_operand)
+// Convert OpenMesh to VolumeMesh using half-edge structure for efficient
+// processing
+std::shared_ptr<VolumeMesh> openmesh_to_volumemesh(PolyMesh* openmesh)
 {
     auto volumemesh = std::make_shared<VolumeMesh>();
-    auto topology = mesh_operand->get_component<MeshComponent>();
-
-    // Get mesh data
-    const auto& vertices = topology->get_vertices();
-    auto faceVertexIndices = topology->get_face_vertex_indices();
-    auto faceVertexCounts = topology->get_face_vertex_counts();
+    if (!openmesh || openmesh->n_faces() == 0) {
+        return volumemesh;
+    }
 
     // Add vertices to volume mesh
-    for (const auto& vv : vertices) {
-        VolumeMesh::PointT point(vv[0], vv[1], vv[2]);
+    for (const auto& v : openmesh->vertices()) {
+        const auto& p = openmesh->point(v);
+        VolumeMesh::PointT point(p[0], p[1], p[2]);
         volumemesh->add_vertex(point);
     }
 
-    // Build triangle faces and reconstruct tetrahedra
-    std::vector<std::array<int, 3>> triangles;
-    size_t vertexIndex = 0;
-
-    // Extract all triangular faces
-    for (size_t i = 0; i < faceVertexCounts.size(); i++) {
-        if (faceVertexCounts[i] == 3) {
-            std::array<int, 3> triangle;
-            for (int j = 0; j < 3; j++) {
-                triangle[j] = faceVertexIndices[vertexIndex + j];
-            }
-            triangles.push_back(triangle);
+    // Special case: single tetrahedron (4 faces, 4 vertices)
+    if (openmesh->n_faces() == 4 && openmesh->n_vertices() == 4) {
+        std::vector<OpenVolumeMesh::VertexHandle> tet_vertices;
+        for (int i = 0; i < 4; i++) {
+            tet_vertices.push_back(OpenVolumeMesh::VertexHandle(i));
         }
-        vertexIndex += faceVertexCounts[i];
+        volumemesh->add_cell(tet_vertices);
+        return volumemesh;
     }
 
-    // Build adjacency information: edge -> adjacent triangles
-    std::map<std::pair<int, int>, std::vector<size_t>> edge_to_triangles;
+    // Use efficient algorithm based on edge adjacency
+    std::unordered_map<uint64_t, std::vector<PolyMesh::FaceHandle>>
+        edge_to_faces;
 
-    for (size_t t = 0; t < triangles.size(); t++) {
-        const auto& tri = triangles[t];
-        // Add each edge of the triangle
-        for (int i = 0; i < 3; i++) {
-            int v1 = tri[i];
-            int v2 = tri[(i + 1) % 3];
-            // Ensure consistent edge ordering
-            if (v1 > v2)
-                std::swap(v1, v2);
-            edge_to_triangles[{ v1, v2 }].push_back(t);
+    auto encode_edge = [](int v1, int v2) -> uint64_t {
+        if (v1 > v2)
+            std::swap(v1, v2);
+        return (static_cast<uint64_t>(v1) << 32) | static_cast<uint64_t>(v2);
+    };
+
+    // Build edge-to-faces mapping using OpenMesh's efficient iteration
+    std::vector<std::array<int, 3>> all_triangles;
+    all_triangles.reserve(openmesh->n_faces());
+
+    for (const auto& f : openmesh->faces()) {
+        std::vector<int> face_verts;
+        for (const auto& fv : f.vertices()) {
+            face_verts.push_back(fv.idx());
         }
-    }
 
-    // Find tetrahedra by looking for sets of 4 triangles that share the same 4
-    // vertices
-    std::map<std::set<int>, std::vector<size_t>> vertex_set_to_triangles;
+        if (face_verts.size() == 3) {  // Only process triangles
+            std::array<int, 3> triangle = { face_verts[0],
+                                            face_verts[1],
+                                            face_verts[2] };
+            all_triangles.push_back(triangle);
 
-    for (size_t t = 0; t < triangles.size(); t++) {
-        const auto& tri = triangles[t];
-        std::set<int> tri_vertices(tri.begin(), tri.end());
-        vertex_set_to_triangles[tri_vertices].push_back(t);
-    }
-
-    // For each unique set of 4 vertices, find all triangles that use only these
-    // vertices
-    std::set<std::set<int>> processed_tets;
-
-    for (const auto& tri : triangles) {
-        std::set<int> tri_vertices(tri.begin(), tri.end());
-
-        // Look for other triangles that could form a tetrahedron with this one
-        for (const auto& other_tri : triangles) {
-            std::set<int> combined_vertices(tri_vertices);
-            combined_vertices.insert(other_tri.begin(), other_tri.end());
-
-            // If we have exactly 4 vertices, this could be part of a
-            // tetrahedron
-            if (combined_vertices.size() == 4 &&
-                processed_tets.find(combined_vertices) ==
-                    processed_tets.end()) {
-                // Check if we have exactly 4 triangular faces using these 4
-                // vertices
-                std::vector<size_t> candidate_triangles;
-
-                for (size_t t = 0; t < triangles.size(); t++) {
-                    std::set<int> t_vertices(
-                        triangles[t].begin(), triangles[t].end());
-                    // Check if this triangle uses only vertices from our set of
-                    // 4
-                    if (std::includes(
-                            combined_vertices.begin(),
-                            combined_vertices.end(),
-                            t_vertices.begin(),
-                            t_vertices.end())) {
-                        candidate_triangles.push_back(t);
-                    }
-                }
-
-                // If we found exactly 4 triangles, we have a tetrahedron
-                if (candidate_triangles.size() == 4) {
-                    processed_tets.insert(combined_vertices);
-
-                    // Create tetrahedron from the 4 vertices
-                    std::vector<OpenVolumeMesh::VertexHandle> tet_vertices;
-                    for (int v : combined_vertices) {
-                        tet_vertices.push_back(OpenVolumeMesh::VertexHandle(v));
-                    }
-                    volumemesh->add_cell(tet_vertices);
-                }
+            for (int i = 0; i < 3; i++) {
+                int v1 = face_verts[i];
+                int v2 = face_verts[(i + 1) % 3];
+                uint64_t edge_key = encode_edge(v1, v2);
+                edge_to_faces[edge_key].push_back(f);
             }
         }
     }
+
+    if (all_triangles.empty()) {
+        return volumemesh;
+    }
+
+    // Use the optimized tetrahedral reconstruction from namespace
+    fast_tetrahedral_reconstruction(all_triangles, volumemesh);
 
     return volumemesh;
 }
