@@ -32,4 +32,4 @@ if(ENABLE_GPU_GEOM_ALGORITHM)
 	target_link_libraries(geometry PUBLIC GPUContext shaders_interface)
 endif()
 
-target_compile_definitions(geometry PRIVATE GEOM_COMPUTE_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/algorithms/CS/")
+target_compile_definitions(geometry PRIVATE GEOM_COMPUTE_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/source/algorithms/CS/")
