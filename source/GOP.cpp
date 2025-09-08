@@ -105,11 +105,12 @@ std::string Geometry::to_string() const
 
 void Geometry::attach_component(const GeometryComponentHandle& component)
 {
-    if (component->get_attached_operand() != this) {
-        spdlog::warn(
-            "A component should never be attached to two operands, unless you "
-            "know what you are doing");
-    }
+    // if (component->get_attached_operand() != this) {
+    //     spdlog::warn(
+    //         "A component should never be attached to two operands, unless you
+    //         " "know what you are doing");
+    // }
+    component->attached_operand = this;
     components_.push_back(component);
 }
 

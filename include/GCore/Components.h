@@ -22,6 +22,7 @@ struct GEOMETRY_API GeometryComponent {
 #if USE_USD_SCRATCH_BUFFER
     pxr::SdfPath scratch_buffer_path;
 #endif
+    friend class Geometry;
 };
 
 USTC_CG_NAMESPACE_CLOSE_SCOPE
