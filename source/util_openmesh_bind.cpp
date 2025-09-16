@@ -250,78 +250,67 @@ namespace {
 // Fast hash function for triangle sorting
 inline uint64_t hash_triangle(int v0, int v1, int v2)
 {
-    // Sort vertices
-    if (v0 > v1)
-        std::swap(v0, v1);
-    if (v1 > v2)
-        std::swap(v1, v2);
-    if (v0 > v1)
-        std::swap(v0, v1);
+    // Sort vertices to ensure consistent hashing
+    if (v0 > v1) std::swap(v0, v1);
+    if (v1 > v2) std::swap(v1, v2);
+    if (v0 > v1) std::swap(v0, v1);
 
-    return (static_cast<uint64_t>(v0) << 42) |
-           (static_cast<uint64_t>(v1) << 21) | static_cast<uint64_t>(v2);
+    // Use a simple but effective hash: combine indices with shifts
+    return (static_cast<uint64_t>(v0) << 40) | (static_cast<uint64_t>(v1) << 20) | static_cast<uint64_t>(v2);
 }
 
-// Fast tetrahedral reconstruction using hash maps - moved before
-// operand_to_openvolulemesh
+// Optimized tetrahedral reconstruction using hash maps
 void fast_tetrahedral_reconstruction(
     const std::vector<std::array<int, 3>>& triangles,
     std::shared_ptr<OpenVolumeMesh::GeometricTetrahedralMeshV3d> volumemesh)
 {
-    if (triangles.size() < 4)
-        return;
+    if (triangles.size() < 4) return;
 
-    // Build triangle hash map for O(1) lookup
+    // Pre-compute triangle hashes for O(1) lookup
     std::unordered_set<uint64_t> triangle_set;
     triangle_set.reserve(triangles.size());
-
     for (const auto& tri : triangles) {
         triangle_set.insert(hash_triangle(tri[0], tri[1], tri[2]));
     }
 
+    // Track processed tetrahedra to avoid duplicates
     std::unordered_set<uint64_t> processed_tets;
+    processed_tets.reserve(triangles.size() / 2); // Estimate
 
-    // Enhanced algorithm: use edge-based approach for better handling of
-    // adjacent tetrahedra
+    // Build edge-to-triangles mapping for efficient adjacency lookup
     std::unordered_map<uint64_t, std::vector<size_t>> edge_to_triangles;
+    edge_to_triangles.reserve(triangles.size() * 3); // Each triangle has 3 edges
 
     auto encode_edge = [](int v1, int v2) -> uint64_t {
-        if (v1 > v2)
-            std::swap(v1, v2);
+        if (v1 > v2) std::swap(v1, v2);
         return (static_cast<uint64_t>(v1) << 32) | static_cast<uint64_t>(v2);
     };
 
-    // Build edge-to-triangles mapping
-    for (size_t i = 0; i < triangles.size(); i++) {
+    for (size_t i = 0; i < triangles.size(); ++i) {
         const auto& tri = triangles[i];
-        for (int j = 0; j < 3; j++) {
-            int v1 = tri[j];
-            int v2 = tri[(j + 1) % 3];
-            uint64_t edge_key = encode_edge(v1, v2);
+        for (int j = 0; j < 3; ++j) {
+            uint64_t edge_key = encode_edge(tri[j], tri[(j + 1) % 3]);
             edge_to_triangles[edge_key].push_back(i);
         }
     }
 
-    // For each triangle, try to find tetrahedra
-    for (size_t i = 0; i < triangles.size(); i++) {
+    // For each triangle, find candidate fourth vertices
+    for (size_t i = 0; i < triangles.size(); ++i) {
         const auto& base_tri = triangles[i];
-        std::unordered_set<int> candidate_vertices;
+        std::vector<int> candidate_vertices;
 
-        // Find candidate fourth vertices through edge adjacency
-        for (int j = 0; j < 3; j++) {
-            int v1 = base_tri[j];
-            int v2 = base_tri[(j + 1) % 3];
-            uint64_t edge_key = encode_edge(v1, v2);
-
+        // Collect candidate vertices from adjacent triangles via edges
+        for (int j = 0; j < 3; ++j) {
+            uint64_t edge_key = encode_edge(base_tri[j], base_tri[(j + 1) % 3]);
             auto it = edge_to_triangles.find(edge_key);
             if (it != edge_to_triangles.end()) {
-                for (size_t adj_tri_idx : it->second) {
-                    if (adj_tri_idx != i) {
-                        const auto& adj_tri = triangles[adj_tri_idx];
-                        for (int k = 0; k < 3; k++) {
+                for (size_t adj_idx : it->second) {
+                    if (adj_idx != i) {
+                        const auto& adj_tri = triangles[adj_idx];
+                        for (int k = 0; k < 3; ++k) {
                             int vertex = adj_tri[k];
-                            if (vertex != v1 && vertex != v2) {
-                                candidate_vertices.insert(vertex);
+                            if (vertex != base_tri[j] && vertex != base_tri[(j + 1) % 3]) {
+                                candidate_vertices.push_back(vertex);
                             }
                         }
                     }
@@ -329,34 +318,34 @@ void fast_tetrahedral_reconstruction(
             }
         }
 
-        // Test each candidate to see if it forms a valid tetrahedron
+        // Remove duplicates from candidates
+        std::sort(candidate_vertices.begin(), candidate_vertices.end());
+        candidate_vertices.erase(std::unique(candidate_vertices.begin(), candidate_vertices.end()), candidate_vertices.end());
+
+        // Test each candidate for valid tetrahedron
         for (int fourth_vertex : candidate_vertices) {
-            std::vector<int> tet_verts = {
-                base_tri[0], base_tri[1], base_tri[2], fourth_vertex
-            };
+            std::array<int, 4> tet_verts = { base_tri[0], base_tri[1], base_tri[2], fourth_vertex };
             std::sort(tet_verts.begin(), tet_verts.end());
 
-            // Hash for duplicate checking
+            // Compute hash for duplicate checking
             uint64_t tet_hash = 0;
             for (int v : tet_verts) {
-                tet_hash = tet_hash * 1000003ULL + static_cast<uint64_t>(v);
+                tet_hash = tet_hash * 6364136223846793005ULL + static_cast<uint64_t>(v); // FNV-like hash
             }
 
-            if (processed_tets.count(tet_hash))
-                continue;
+            if (processed_tets.count(tet_hash)) continue;
 
-            // Check if all 4 faces exist
+            // Verify all 4 faces exist in the triangle set
             bool valid_tet = true;
-            std::vector<std::array<int, 3>> faces = {
-                { tet_verts[0], tet_verts[1], tet_verts[2] },
-                { tet_verts[0], tet_verts[1], tet_verts[3] },
-                { tet_verts[0], tet_verts[2], tet_verts[3] },
-                { tet_verts[1], tet_verts[2], tet_verts[3] }
-            };
+            std::array<std::array<int, 3>, 4> faces = {{
+                {tet_verts[0], tet_verts[1], tet_verts[2]},
+                {tet_verts[0], tet_verts[1], tet_verts[3]},
+                {tet_verts[0], tet_verts[2], tet_verts[3]},
+                {tet_verts[1], tet_verts[2], tet_verts[3]}
+            }};
 
             for (const auto& face : faces) {
-                if (triangle_set.find(hash_triangle(
-                        face[0], face[1], face[2])) == triangle_set.end()) {
+                if (triangle_set.find(hash_triangle(face[0], face[1], face[2])) == triangle_set.end()) {
                     valid_tet = false;
                     break;
                 }
@@ -364,10 +353,10 @@ void fast_tetrahedral_reconstruction(
 
             if (valid_tet) {
                 processed_tets.insert(tet_hash);
-
                 std::vector<OpenVolumeMesh::VertexHandle> tet_handles;
+                tet_handles.reserve(4);
                 for (int v : tet_verts) {
-                    tet_handles.push_back(OpenVolumeMesh::VertexHandle(v));
+                    tet_handles.emplace_back(v);
                 }
                 volumemesh->add_cell(tet_handles);
             }
