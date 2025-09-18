@@ -16,6 +16,20 @@ class GEOMETRY_API VolumeComponent : public GeometryComponent {
 
     GeometryComponentHandle copy(Geometry* operand) const override;
     std::string to_string() const override;
+    
+    size_t hash() const override
+    {
+        // Simple hash based on grid names and basic properties
+        size_t h = 0;
+        for (const auto& [name, grid] : grids_) {
+            h ^= std::hash<std::string>{}(name) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            if (grid) {
+                h ^= std::hash<size_t>{}(grid->activeVoxelCount()) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            }
+        }
+        return h;
+    }
+    
     void add_grid(openvdb::FloatGrid::Ptr grid);
 
     void apply_transform(const glm::mat4& transform) override;

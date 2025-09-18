@@ -18,6 +18,20 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
 
     std::string to_string() const override;
     GeometryComponentHandle copy(Geometry* operand) const override;
+    
+    size_t hash() const override
+    {
+        size_t h = 0;
+        for (const auto& v : vertices) {
+            h ^= std::hash<float>{}(v.x) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(v.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(v.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        for (const auto& i : faceVertexIndices) {
+            h ^= std::hash<int>{}(i) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        return h;
+    }
 
     MeshIGLView get_igl_view();
     ConstMeshIGLView get_igl_view() const;

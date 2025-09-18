@@ -11,6 +11,27 @@ class GEOMETRY_API XformComponent : public GeometryComponent {
    public:
     GeometryComponentHandle copy(Geometry* operand) const override;
     std::string to_string() const override;
+    
+    size_t hash() const override
+    {
+        size_t h = 0;
+        for (const auto& t : translation) {
+            h ^= std::hash<float>{}(t.x) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(t.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(t.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        for (const auto& s : scale) {
+            h ^= std::hash<float>{}(s.x) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(s.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(s.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        for (const auto& r : rotation) {
+            h ^= std::hash<float>{}(r.x) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(r.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(r.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        return h;
+    }
 
     explicit XformComponent(Geometry* attached_operand)
         : GeometryComponent(attached_operand)

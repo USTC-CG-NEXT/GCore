@@ -11,6 +11,25 @@ struct GEOMETRY_API CurveComponent : public GeometryComponent {
 
     std::string to_string() const override;
 
+    size_t hash() const override
+    {
+        size_t h = 0;
+        for (const auto& v : vertices) {
+            h ^= std::hash<float>{}(v.x) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(v.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<float>{}(v.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        for (const auto& w : width) {
+            h ^= std::hash<float>{}(w) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        for (const auto& c : vert_count) {
+            h ^= std::hash<int>{}(c) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        h ^= std::hash<bool>{}(periodic) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(static_cast<int>(curve_type)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+
     void apply_transform(const glm::mat4& transform) override
     {
         auto vertices = get_vertices();

@@ -12,6 +12,21 @@ class GEOMETRY_API InstancerComponent final : public GeometryComponent {
     ~InstancerComponent() override;
     GeometryComponentHandle copy(Geometry* operand) const override;
     std::string to_string() const override;
+    
+    size_t hash() const override
+    {
+        size_t h = 0;
+        for (const auto& inst : instances_) {
+            // Hash each element of the matrix
+            for (int i = 0; i < 4; ++i) {
+                for (int j = 0; j < 4; ++j) {
+                    h ^= std::hash<float>{}(inst[i][j]) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                }
+            }
+        }
+        return h;
+    }
+    
     void apply_transform(const glm::mat4& transform) override;
 
     void add_instance(const glm::mat4& instance);

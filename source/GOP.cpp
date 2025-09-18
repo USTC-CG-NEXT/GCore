@@ -102,6 +102,14 @@ std::string Geometry::to_string() const
     }
     return out.str();
 }
+size_t Geometry::hash() const
+{
+    size_t h = 0;
+    for (const auto& comp : components_) {
+        h ^= comp->hash() + 0x9e3779b9 + (h << 6) + (h >> 2);
+    }
+    return h;
+}
 
 void Geometry::attach_component(const GeometryComponentHandle& component)
 {

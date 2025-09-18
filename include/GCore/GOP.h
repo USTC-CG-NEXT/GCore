@@ -48,6 +48,8 @@ class GEOMETRY_API Geometry {
 
     virtual std::string to_string() const;
 
+    [[nodiscard]] size_t hash() const;
+
     template<typename OperandType>
     std::shared_ptr<OperandType> get_component(size_t idx = 0) const;
     void attach_component(const GeometryComponentHandle& component);

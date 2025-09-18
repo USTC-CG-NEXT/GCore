@@ -18,6 +18,16 @@ struct GEOMETRY_API SkelComponent : public GeometryComponent {
         throw std::runtime_error("Not implemented");
     }
 
+    size_t hash() const override
+    {
+        // Simple hash implementation for skeleton component
+        size_t h = 0;
+        h ^= std::hash<size_t>{}(jointOrder.size()) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<size_t>{}(localTransforms.size()) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<size_t>{}(bindTransforms.size()) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+
     std::string to_string() const override;
 
     pxr::VtTokenArray jointOrder;

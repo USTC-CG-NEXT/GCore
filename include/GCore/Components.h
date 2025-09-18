@@ -12,6 +12,7 @@ struct GEOMETRY_API GeometryComponent {
 
     virtual GeometryComponentHandle copy(Geometry* operand) const = 0;
     virtual std::string to_string() const = 0;
+    virtual size_t hash() const = 0;
 
     [[nodiscard]] Geometry* get_attached_operand() const;
 
