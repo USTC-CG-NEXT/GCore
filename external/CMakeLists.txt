@@ -31,3 +31,8 @@ endif()
 add_subdirectory(OpenVolumeMesh)
 set_target_properties(OpenVolumeMesh PROPERTIES FOLDER "ThirdParty")
 set_target_properties(OpenVolumeMesh PROPERTIES ${OUTPUT_DIR})
+
+# suppress C4910 warnings for OpenVolumeMesh
+if(MSVC)
+    target_compile_options(OpenVolumeMesh PUBLIC /wd4910)
+endif()
