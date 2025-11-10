@@ -50,6 +50,7 @@ Geometry::Geometry(Geometry&& operand) noexcept
 
 Geometry& Geometry::operator=(const Geometry& operand)
 {
+    this->components_.clear();
     for (auto&& operand_component : operand.components_) {
         this->components_.push_back(operand_component->copy(this));
     }
