@@ -105,14 +105,27 @@ bool write_geometry_to_usd(
             if (!mesh_usdview.get_normals().empty()) {
                 usdgeom.CreateNormalsAttr().Set(
                     mesh_usdview.get_normals(), time);
-                if (mesh_usdview.get_normals().size() ==
-                    mesh_usdview.get_vertices().size()) {
+                
+                // Check if normals are per-vertex or per-face-vertex (face-varying)
+                size_t num_normals = mesh_usdview.get_normals().size();
+                size_t num_vertices = mesh_usdview.get_vertices().size();
+                size_t num_face_vertices = mesh_usdview.get_face_vertex_indices().size();
+                
+                if (num_normals == num_vertices) {
+                    // One normal per vertex - vertex interpolation
                     usdgeom.SetNormalsInterpolation(pxr::UsdGeomTokens->vertex);
                 }
-                else {
+                else if (num_normals == num_face_vertices) {
+                    // One normal per face-vertex - faceVarying interpolation
                     usdgeom.SetNormalsInterpolation(
                         pxr::UsdGeomTokens->faceVarying);
                 }
+                else {
+                    // Mismatch - log error but set faceVarying as fallback
+                    usdgeom.SetNormalsInterpolation(
+                        pxr::UsdGeomTokens->faceVarying);
+                }
+                
                 usdgeom.CreateSubdivisionSchemeAttr().Set(
                     pxr::UsdGeomTokens->none);
             }

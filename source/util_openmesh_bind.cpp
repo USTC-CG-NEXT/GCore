@@ -471,8 +471,8 @@ std::shared_ptr<Geometry> openvolulemesh_to_operand(VolumeMesh* volumemesh)
     geometry->attach_component(mesh);
 
     std::vector<glm::vec3> points;
-    std::vector<int> cellVertexIndices;
-    std::vector<int> cellVertexCounts;
+    std::vector<int> faceVertexIndices;
+    std::vector<int> faceVertexCounts;
 
     // Extract vertices
     for (auto v_it = volumemesh->vertices_begin();
@@ -482,22 +482,33 @@ std::shared_ptr<Geometry> openvolulemesh_to_operand(VolumeMesh* volumemesh)
         points.push_back(glm::vec3(point[0], point[1], point[2]));
     }
 
-    // Extract cells (tetrahedra) - using face interface for compatibility
-    for (auto c_it = volumemesh->cells_begin(); c_it != volumemesh->cells_end();
-         ++c_it) {
-        auto cell_vertices = volumemesh->get_cell_vertices(*c_it);
-        cellVertexCounts.push_back(cell_vertices.size());
-
-        for (const auto& cv : cell_vertices) {
-            cellVertexIndices.push_back(cv.idx());
+    // Extract BOUNDARY FACES (triangles) instead of cells
+    // This ensures we only output the surface mesh for visualization
+    for (auto f_it = volumemesh->faces_begin(); 
+         f_it != volumemesh->faces_end(); 
+         ++f_it) {
+        // Only add boundary faces (faces with only one adjacent cell)
+        if (volumemesh->is_boundary(*f_it)) {
+            std::vector<int> face_verts;
+            
+            // Iterate through face vertices using half-face vertex iterator
+            for (auto fv_it = volumemesh->fv_iter(*f_it); fv_it.valid(); ++fv_it) {
+                face_verts.push_back((*fv_it).idx());  // Use (*fv_it) instead of fv_it->
+            }
+            
+            if (face_verts.size() == 3) {
+                // This is a triangle - add it
+                faceVertexCounts.push_back(3);
+                for (int vid : face_verts) {
+                    faceVertexIndices.push_back(vid);
+                }
+            }
         }
     }
 
     mesh->set_vertices(points);
-    // Using face_vertex methods as MeshComponent interface - these represent
-    // cells
-    mesh->set_face_vertex_indices(cellVertexIndices);
-    mesh->set_face_vertex_counts(cellVertexCounts);
+    mesh->set_face_vertex_indices(faceVertexIndices);
+    mesh->set_face_vertex_counts(faceVertexCounts);
 
     return geometry;
 }
