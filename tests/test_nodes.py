@@ -61,7 +61,7 @@ def test_create_grid_geometry():
     
     # Create graph and load geometry nodes configuration
     g = RuzinoGraph("GridGeometryTest")
-    config_path = os.path.join(binary_dir, "geom_test_minimal.json")
+    config_path = os.path.join(binary_dir, "geometry_nodes.json")
     
     g.loadConfiguration(config_path)
     print(f"✓ Loaded geometry nodes configuration")
@@ -143,7 +143,7 @@ def test_node_graph_chain():
     print("="*70)
     
     g = RuzinoGraph("ChainTest")
-    config_path = os.path.join(binary_dir, "geom_test_minimal.json")
+    config_path = os.path.join(binary_dir, "geometry_nodes.json")
     
     g.loadConfiguration(config_path)
     print(f"✓ Loaded configuration")
