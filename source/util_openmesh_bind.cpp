@@ -482,27 +482,22 @@ std::shared_ptr<Geometry> openvolulemesh_to_operand(VolumeMesh* volumemesh)
         points.push_back(glm::vec3(point[0], point[1], point[2]));
     }
 
-    // Extract BOUNDARY FACES (triangles) instead of cells
-    // This ensures we only output the surface mesh for visualization
-    for (auto f_it = volumemesh->faces_begin(); 
-         f_it != volumemesh->faces_end(); 
-         ++f_it) {
-        // Only add boundary faces (faces with only one adjacent cell)
-        if (volumemesh->is_boundary(*f_it)) {
-            std::vector<int> face_verts;
-            
-            // Iterate through face vertices using half-face vertex iterator
-            for (auto fv_it = volumemesh->fv_iter(*f_it); fv_it.valid(); ++fv_it) {
-                face_verts.push_back((*fv_it).idx());  // Use (*fv_it) instead of fv_it->
-            }
-            
-            if (face_verts.size() == 3) {
-                // This is a triangle - add it
-                faceVertexCounts.push_back(3);
-                for (int vid : face_verts) {
-                    faceVertexIndices.push_back(vid);
-                }
-            }
+    // Extract cells as face_vertex data
+    // For volumetric meshes, represent each cell (e.g., tetrahedron) as a single entry
+    for (auto c_it = volumemesh->cells_begin(); 
+         c_it != volumemesh->cells_end(); 
+         ++c_it) {
+        std::vector<int> cell_verts;
+        
+        // Iterate through cell vertices
+        for (auto cv_it = volumemesh->cv_iter(*c_it); cv_it.valid(); ++cv_it) {
+            cell_verts.push_back((*cv_it).idx());
+        }
+        
+        // Add the cell as a single face with N vertices (e.g., 4 for tetrahedron)
+        faceVertexCounts.push_back(static_cast<int>(cell_verts.size()));
+        for (int vid : cell_verts) {
+            faceVertexIndices.push_back(vid);
         }
     }
 

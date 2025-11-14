@@ -14,15 +14,16 @@ using namespace USTC_CG;
 
 class IntersectionTests : public ::testing::Test {
    protected:
-    void SetUp() override
+    static void SetUpTestSuite()
     {
         RHI::init();
         init_gpu_geometry_algorithms();
     }
 
-    void TearDown() override
+    static void TearDownTestSuite()
     {
         deinit_gpu_geometry_algorithms();
+        RHI::shutdown();
     }
 
     // Helper to create a simple triangle mesh
