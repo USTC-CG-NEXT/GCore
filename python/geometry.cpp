@@ -9,6 +9,7 @@
 #include "GCore/Components.h"
 #include "GCore/Components/MeshComponent.h"
 #include "GCore/Components/PointsComponent.h"
+#include "GCore/Components/CurveComponent.h"
 #include "GCore/Components/XformComponent.h"
 
 // Include glm bindings
@@ -167,6 +168,33 @@ NB_MODULE(geometry_py, m)
         .def("set_width", &PointsComponent::set_width)
         .def("set_normals", &PointsComponent::set_normals);
 
+    // CurveComponent
+    nb::class_<CurveComponent, GeometryComponent>(m, "CurveComponent")
+        .def("to_string", &CurveComponent::to_string)
+        .def("get_vertices", &CurveComponent::get_vertices)
+        .def("get_width", &CurveComponent::get_width)
+        .def("get_widths", &CurveComponent::get_widths)
+        .def("get_vert_count", &CurveComponent::get_vert_count)
+        .def("get_curve_counts", &CurveComponent::get_curve_counts)
+        .def("get_display_color", &CurveComponent::get_display_color)
+        .def("get_periodic", &CurveComponent::get_periodic)
+        .def("get_curve_normals", &CurveComponent::get_curve_normals)
+        .def("get_type", &CurveComponent::get_type)
+        .def("set_vertices", &CurveComponent::set_vertices)
+        .def("set_width", &CurveComponent::set_width)
+        .def("set_widths", &CurveComponent::set_widths)
+        .def("set_vert_count", &CurveComponent::set_vert_count)
+        .def("set_curve_counts", &CurveComponent::set_curve_counts)
+        .def("set_display_color", &CurveComponent::set_display_color)
+        .def("set_periodic", &CurveComponent::set_periodic)
+        .def("set_curve_normals", &CurveComponent::set_curve_normals)
+        .def("set_type", &CurveComponent::set_type);
+
+    // CurveType enum
+    nb::enum_<CurveComponent::CurveType>(m, "CurveType")
+        .value("Linear", CurveComponent::CurveType::Linear)
+        .value("Cubic", CurveComponent::CurveType::Cubic);
+
     // XformComponent
     nb::class_<XformComponent, GeometryComponent>(m, "XformComponent")
         .def("to_string", &XformComponent::to_string);
@@ -188,6 +216,9 @@ NB_MODULE(geometry_py, m)
         .def("get_points_component", [](const Geometry& g, size_t idx) {
             return g.get_component<PointsComponent>(idx);
         }, nb::arg("idx") = 0, "Get PointsComponent at index")
+        .def("get_curve_component", [](const Geometry& g, size_t idx) {
+            return g.get_component<CurveComponent>(idx);
+        }, nb::arg("idx") = 0, "Get CurveComponent at index")
         .def("get_xform_component", [](const Geometry& g, size_t idx) {
             return g.get_component<XformComponent>(idx);
         }, nb::arg("idx") = 0, "Get XformComponent at index")
@@ -198,6 +229,7 @@ NB_MODULE(geometry_py, m)
     // Static factory methods
     m.def("CreateMesh", &Geometry::CreateMesh, "Create a mesh geometry");
     m.def("CreatePoints", &Geometry::CreatePoints, "Create a points geometry");
+    m.def("CreateCurve", &Geometry::CreateCurve, "Create a curve geometry");
 #ifdef GEOM_USD_EXTENSION
     m.def("CreateVolume", &Geometry::CreateVolume, "Create a volume geometry");
 #endif
