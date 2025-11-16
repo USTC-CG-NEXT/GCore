@@ -59,6 +59,17 @@ struct GEOMETRY_API CurveComponent : public GeometryComponent {
         this->width = width;
     }
 
+    // Alias for compatibility
+    [[nodiscard]] std::vector<float> get_widths() const
+    {
+        return width;
+    }
+
+    void set_widths(const std::vector<float>& widths)
+    {
+        this->width = widths;
+    }
+
     [[nodiscard]] std::vector<int> get_vert_count() const
     {
         return vert_count;
@@ -67,6 +78,17 @@ struct GEOMETRY_API CurveComponent : public GeometryComponent {
     void set_vert_count(const std::vector<int>& vert_count)
     {
         this->vert_count = vert_count;
+    }
+
+    // Alias for compatibility
+    [[nodiscard]] std::vector<int> get_curve_counts() const
+    {
+        return vert_count;
+    }
+
+    void set_curve_counts(const std::vector<int>& counts)
+    {
+        this->vert_count = counts;
     }
 
     [[nodiscard]] std::vector<glm::vec3> get_display_color() const

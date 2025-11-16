@@ -81,6 +81,16 @@ Geometry Geometry::CreatePoints()
     geometry.attach_component(points);
     return std::move(geometry);
 }
+
+Geometry Geometry::CreateCurve()
+{
+    Geometry geometry;
+    std::shared_ptr<CurveComponent> curve =
+        std::make_shared<CurveComponent>(&geometry);
+    geometry.attach_component(curve);
+    return std::move(geometry);
+}
+
 #ifdef GEOM_USD_EXTENSION
 Geometry Geometry::CreateVolume()
 {

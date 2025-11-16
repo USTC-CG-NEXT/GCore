@@ -31,6 +31,7 @@ class GEOMETRY_API Geometry {
 
     static Geometry CreateMesh();
     static Geometry CreatePoints();
+    static Geometry CreateCurve();
 #ifdef GEOM_USD_EXTENSION
     static Geometry CreateVolume();
 #endif
