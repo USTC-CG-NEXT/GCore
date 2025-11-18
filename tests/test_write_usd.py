@@ -9,7 +9,7 @@ import os
 
 # Paths are set up in conftest.py
 # Just need the binary_dir reference
-binary_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'Binaries', 'Debug')
+binary_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'Binaries', 'Release')
 binary_dir = os.path.abspath(binary_dir)
 
 from ruzino_graph import RuzinoGraph

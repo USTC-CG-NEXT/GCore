@@ -6,7 +6,7 @@ import sys
 import os
 
 # Get binary directory
-binary_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'Binaries', 'Debug')
+binary_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'Binaries', 'Release')
 binary_dir = os.path.abspath(binary_dir)
 
 # Set PXR_USD_WINDOWS_DLL_PATH so USD can find its DLLs

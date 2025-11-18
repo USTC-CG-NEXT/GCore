@@ -6,7 +6,7 @@ import sys
 import os
 
 # Add Binaries/Debug to path to find the modules
-binary_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'Binaries', 'Debug')
+binary_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'Binaries', 'Release')
 sys.path.insert(0, os.path.abspath(binary_dir))
 
 import numpy as np
