@@ -26,9 +26,9 @@ void RayGen()
     RayDesc ray;
 
     ray.TMin = 0;
-    ray.TMax = radius / 4.0f;
+    ray.TMax = radius / 2;
     ray.Direction = float3(0, 0, 1);
-    ray.Origin = positions[DispatchRaysIndex().x] + float3(0, 0, radius / 4.0f);
+    ray.Origin = positions[DispatchRaysIndex().x] + float3(0, 0, radius / 2);
 
     TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, payload);
 }
@@ -38,8 +38,8 @@ void AnyHit(
     inout HitInfo payload: SV_RayPayload,
     Attributes attrib: SV_IntersectionAttributes)
 {
-    uint id = 0;
     if (DispatchRaysIndex().x != PrimitiveIndex()) {
+        uint id = 0;
         InterlockedAdd(PairsCount[0], 1u, id);
         Pairs[id] = int2(DispatchRaysIndex().x, PrimitiveIndex());
     }

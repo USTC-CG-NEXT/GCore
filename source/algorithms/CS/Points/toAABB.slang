@@ -14,7 +14,7 @@ void main(int2 i_globalIdx: SV_DispatchThreadID)
     float3 pos = positions[i];
     float3 aabb_min, aabb_max;
     aabb_min = pos - float3(radius, radius, 0);
-    aabb_max = pos + float3(radius, radius, radius / 4);
+    aabb_max = pos + float3(radius, radius, radius / 2);
 
     uint offset = i * 2 * 12;  // 2 float3s = 2 * 3 * 4 bytes
     AABBs.Store3(offset, asuint(aabb_min));
