@@ -25,6 +25,11 @@ struct GEOMETRY_API PointSample {
     unsigned valid;
 };
 
+struct GEOMETRY_API PointPairs {
+    unsigned p1;
+    unsigned p2;
+};
+
 #ifdef GPU_GEOM_ALGORITHM
 
 GEOMETRY_API void init_gpu_geometry_algorithms();
@@ -61,6 +66,15 @@ GEOMETRY_API std::vector<PointSample> IntersectInterweaved(
     const std::vector<glm::vec3>& start_point,
     const std::vector<glm::vec3>& next_point,
     const Geometry& BaseMesh);
+
+GEOMETRY_API nvrhi::BufferHandle FindNeighborsToBuffer(
+    const Geometry& point_cloud,
+    float radius,
+    unsigned& out_pair_count);
+GEOMETRY_API std::vector<PointPairs> FindNeighbors(
+    const Geometry& point_cloud,
+    float radius,
+    unsigned& out_pair_count);
 
 #endif
 
