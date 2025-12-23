@@ -12,7 +12,7 @@ class GEOMETRY_API InstancerComponent final : public GeometryComponent {
     ~InstancerComponent() override;
     GeometryComponentHandle copy(Geometry* operand) const override;
     std::string to_string() const override;
-    
+
     size_t hash() const override
     {
         size_t h = 0;
@@ -20,20 +20,31 @@ class GEOMETRY_API InstancerComponent final : public GeometryComponent {
             // Hash each element of the matrix
             for (int i = 0; i < 4; ++i) {
                 for (int j = 0; j < 4; ++j) {
-                    h ^= std::hash<float>{}(inst[i][j]) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                    h ^= std::hash<float>{}(inst[i][j]) + 0x9e3779b9 +
+                         (h << 6) + (h >> 2);
                 }
             }
         }
         return h;
     }
-    
+
     void apply_transform(const glm::mat4& transform) override;
 
     void add_instance(const glm::mat4& instance);
     const std::vector<glm::mat4>& get_instances() const;
     pxr::VtArray<int> get_proto_indices();
 
+    bool has_rotations_enabled() const
+    {
+        return has_rotations;
+    }
+    void set_has_rotations_enabled(bool enabled)
+    {
+        has_rotations = enabled;
+    }
+
    private:
+    bool has_rotations = false;
     std::vector<glm::mat4> instances_;
 };
 

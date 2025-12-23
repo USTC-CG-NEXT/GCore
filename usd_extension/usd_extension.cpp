@@ -105,12 +105,14 @@ bool write_geometry_to_usd(
             if (!mesh_usdview.get_normals().empty()) {
                 usdgeom.CreateNormalsAttr().Set(
                     mesh_usdview.get_normals(), time);
-                
-                // Check if normals are per-vertex or per-face-vertex (face-varying)
+
+                // Check if normals are per-vertex or per-face-vertex
+                // (face-varying)
                 size_t num_normals = mesh_usdview.get_normals().size();
                 size_t num_vertices = mesh_usdview.get_vertices().size();
-                size_t num_face_vertices = mesh_usdview.get_face_vertex_indices().size();
-                
+                size_t num_face_vertices =
+                    mesh_usdview.get_face_vertex_indices().size();
+
                 if (num_normals == num_vertices) {
                     // One normal per vertex - vertex interpolation
                     usdgeom.SetNormalsInterpolation(pxr::UsdGeomTokens->vertex);
@@ -125,7 +127,7 @@ bool write_geometry_to_usd(
                     usdgeom.SetNormalsInterpolation(
                         pxr::UsdGeomTokens->faceVarying);
                 }
-                
+
                 usdgeom.CreateSubdivisionSchemeAttr().Set(
                     pxr::UsdGeomTokens->none);
             }
@@ -159,8 +161,7 @@ bool write_geometry_to_usd(
             for (const std::string& name :
                  mesh->get_vertex_scalar_quantity_names()) {
                 auto values = mesh_usdview.get_vertex_scalar_quantity(name);
-                const std::string primvar_name =
-                    "vertex:scalar:" + name;
+                const std::string primvar_name = "vertex:scalar:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->FloatArray);
@@ -171,8 +172,7 @@ bool write_geometry_to_usd(
             for (const std::string& name :
                  mesh->get_face_scalar_quantity_names()) {
                 auto values = mesh_usdview.get_face_scalar_quantity(name);
-                const std::string primvar_name =
-                    "face:scalar:" + name;
+                const std::string primvar_name = "face:scalar:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->FloatArray);
@@ -182,8 +182,7 @@ bool write_geometry_to_usd(
 
             for (std::string& name : mesh->get_vertex_color_quantity_names()) {
                 auto values = mesh_usdview.get_vertex_color_quantity(name);
-                const std::string primvar_name =
-                    "vertex:color:" + name;
+                const std::string primvar_name = "vertex:color:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->Color3fArray);
@@ -205,8 +204,7 @@ bool write_geometry_to_usd(
             for (const std::string& name :
                  mesh->get_vertex_vector_quantity_names()) {
                 auto values = mesh_usdview.get_vertex_vector_quantity(name);
-                const std::string primvar_name =
-                    "vertex:vector:" + name;
+                const std::string primvar_name = "vertex:vector:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->Vector3fArray);
@@ -217,8 +215,7 @@ bool write_geometry_to_usd(
             for (const std::string& name :
                  mesh->get_face_vector_quantity_names()) {
                 auto values = mesh_usdview.get_face_vector_quantity(name);
-                const std::string primvar_name =
-                    "face:vector:" + name;
+                const std::string primvar_name = "face:vector:" + name;
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken(primvar_name.c_str()),
                     pxr::SdfValueTypeNames->Vector3fArray);
@@ -355,30 +352,54 @@ bool write_geometry_to_usd(
         auto transforms = instancer->get_instances();
 
         pxr::VtVec3fArray positions = pxr::VtVec3fArray(transforms.size());
-        pxr::VtQuathArray orientations = pxr::VtQuathArray(transforms.size());
-        pxr::VtVec3fArray scales = pxr::VtVec3fArray(transforms.size());
 
-        for (size_t i = 0; i < transforms.size(); ++i) {
-            glm::vec3 translation;
-            glm::quat rotation;
-            glm::vec3 scale;
-
-            // Decompose GLM matrix
-            glm::vec3 skew;
-            glm::vec4 perspective;
-            glm::decompose(
-                transforms[i], scale, rotation, translation, skew, perspective);
-
-            positions[i] =
-                pxr::GfVec3f(translation.x, translation.y, translation.z);
-            orientations[i] =
-                pxr::GfQuath(rotation.w, rotation.x, rotation.y, rotation.z);
-            scales[i] = pxr::GfVec3f(scale.x, scale.y, scale.z);
+        // Fast path: if no rotations, directly extract positions
+        if (!instancer->has_rotations_enabled()) {
+            for (size_t i = 0; i < transforms.size(); ++i) {
+                // Directly extract translation from the last column of the
+                // matrix
+                positions[i] = pxr::GfVec3f(
+                    transforms[i][3][0],
+                    transforms[i][3][1],
+                    transforms[i][3][2]);
+            }
         }
+        else {
+            // Full path: decompose matrices for positions, orientations, and
+            // scales
+            pxr::VtQuathArray orientations =
+                pxr::VtQuathArray(transforms.size());
+            pxr::VtVec3fArray scales = pxr::VtVec3fArray(transforms.size());
+
+            for (size_t i = 0; i < transforms.size(); ++i) {
+                glm::vec3 translation;
+                glm::quat rotation;
+                glm::vec3 scale;
+
+                // Decompose GLM matrix
+                glm::vec3 skew;
+                glm::vec4 perspective;
+                glm::decompose(
+                    transforms[i],
+                    scale,
+                    rotation,
+                    translation,
+                    skew,
+                    perspective);
+
+                positions[i] =
+                    pxr::GfVec3f(translation.x, translation.y, translation.z);
+                orientations[i] = pxr::GfQuath(
+                    rotation.w, rotation.x, rotation.y, rotation.z);
+                scales[i] = pxr::GfVec3f(scale.x, scale.y, scale.z);
+            }
+            instancer_component.CreateOrientationsAttr().Set(
+                orientations, time);
+        }
+
         instancer_component.CreateProtoIndicesAttr().Set(
-            pxr::VtIntArray(instancer->get_proto_indices()));
-        instancer_component.CreatePositionsAttr().Set(positions);
-        instancer_component.CreateOrientationsAttr().Set(orientations);
+            pxr::VtIntArray(instancer->get_proto_indices()), time);
+        instancer_component.CreatePositionsAttr().Set(positions, time);
     }
 
     // Handle materials

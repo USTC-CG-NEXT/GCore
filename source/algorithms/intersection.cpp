@@ -641,7 +641,7 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     // Step 5: Create output buffers for pairs
     spdlog::info("Creating pairs output buffers");
     // Maximum possible pairs (each point could pair with every other point)
-    size_t max_pairs = point_count * point_count;
+    size_t max_pairs = point_count * 30;
 
     auto pairs_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
