@@ -1,6 +1,7 @@
 #include <GCore/algorithms/intersection.h>
 
 #include "GCore/Components/MeshComponent.h"
+#include "GCore/Components/PointsComponent.h"
 #include "GCore/Components/XformComponent.h"
 
 #ifdef GPU_GEOM_ALGORITHM
@@ -427,14 +428,14 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     unsigned& out_pair_count)
 {
     init_gpu_geometry_algorithms();
-    auto mesh_component = point_cloud.get_component<MeshComponent>();
+    auto points_component = point_cloud.get_component<PointsComponent>();
 
-    if (!mesh_component) {
+    if (!points_component) {
         out_pair_count = 0;
         return nullptr;
     }
 
-    std::vector<glm::vec3> positions = mesh_component->get_vertices();
+    std::vector<glm::vec3> positions = points_component->get_vertices();
 
     if (positions.empty()) {
         out_pair_count = 0;
@@ -458,14 +459,16 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     // Upload position data using writeBuffer
     auto upload_cmd = device->createCommandList();
     upload_cmd->open();
-    upload_cmd->writeBuffer(position_buffer, positions.data(), point_count * sizeof(glm::vec3));
+    upload_cmd->writeBuffer(
+        position_buffer, positions.data(), point_count * sizeof(glm::vec3));
     upload_cmd->close();
     device->executeCommandList(upload_cmd);
     device->waitForIdle();
-    
+
     resource_allocator.destroy(upload_cmd);
 
-    // Step 2: Create AABB buffer and compute AABBs using toAABB.slang (raw buffer for acceleration structure)
+    // Step 2: Create AABB buffer and compute AABBs using toAABB.slang (raw
+    // buffer for acceleration structure)
     auto aabb_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
             .setByteSize(point_count * 2 * sizeof(glm::vec3))
@@ -481,24 +484,28 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     aabb_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/toAABB.slang")
         .set_entry_name("main")
         .set_shader_type(nvrhi::ShaderType::Compute);
-    
-    spdlog::info("Compiling toAABB shader from path: {}", GEOM_COMPUTE_SHADER_DIR "Points/toAABB.slang");
+
+    spdlog::info(
+        "Compiling toAABB shader from path: {}",
+        GEOM_COMPUTE_SHADER_DIR "Points/toAABB.slang");
     spdlog::info("Entry name: main, ShaderType: Compute");
-    
+
     auto aabb_program = resource_allocator.create(aabb_desc);
-    
+
     // Check for shader compilation errors
     if (!aabb_program->get_error_string().empty()) {
-        spdlog::error("toAABB shader compilation failed: {}", aabb_program->get_error_string());
+        spdlog::error(
+            "toAABB shader compilation failed: {}",
+            aabb_program->get_error_string());
         resource_allocator.destroy(aabb_program);
         resource_allocator.destroy(aabb_buffer);
         resource_allocator.destroy(position_buffer);
         out_pair_count = 0;
         return nullptr;
     }
-    
+
     spdlog::info("toAABB shader compiled successfully");
-    
+
     if (!aabb_program) {
         spdlog::error("aabb_program is null!");
         resource_allocator.destroy(aabb_buffer);
@@ -506,7 +513,7 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
         out_pair_count = 0;
         return nullptr;
     }
-    
+
     if (!aabb_program->getBufferPointer()) {
         spdlog::error("aabb_program buffer pointer is null!");
         resource_allocator.destroy(aabb_program);
@@ -517,36 +524,37 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     }
 
     spdlog::info("Creating ProgramVars...");
-    
+
     ProgramVars aabb_vars(resource_allocator, aabb_program);
-    
+
     // Create constant buffer for radius
     auto radius_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
-            .setByteSize(16) // Align to 16 bytes for D3D12
+            .setByteSize(16)  // Align to 16 bytes for D3D12
             .setIsConstantBuffer(true)
             .setInitialState(nvrhi::ResourceStates::ConstantBuffer)
             .setKeepInitialState(true)
             .setDebugName("radiusBuffer"));
-    
+
     // Upload radius to constant buffer
     auto radius_upload_cmd = device->createCommandList();
     radius_upload_cmd->open();
-    float radius_data[4] = {radius, 0, 0, 0}; // Pad to 16 bytes
-    radius_upload_cmd->writeBuffer(radius_buffer, radius_data, sizeof(radius_data));
+    float radius_data[4] = { radius, 0, 0, 0 };  // Pad to 16 bytes
+    radius_upload_cmd->writeBuffer(
+        radius_buffer, radius_data, sizeof(radius_data));
     radius_upload_cmd->close();
     device->executeCommandList(radius_upload_cmd);
     device->waitForIdle();
     resource_allocator.destroy(radius_upload_cmd);
-    
+
     spdlog::info("Setting shader resources...");
     aabb_vars["SearchParams"] = radius_buffer;
     aabb_vars["positions"] = position_buffer;
     aabb_vars["AABBs"] = aabb_buffer;
-    
+
     spdlog::info("Calling finish_setting_vars...");
     aabb_vars.finish_setting_vars();
-    
+
     spdlog::info("ProgramVars configured, creating compute shader");
 
     // Create compute pipeline
@@ -560,28 +568,30 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     nvrhi::ComputePipelineDesc compute_pipeline_desc;
     compute_pipeline_desc.CS = compute_shader;
     compute_pipeline_desc.bindingLayouts = aabb_vars.get_binding_layout();
-    
+
     spdlog::info("Creating compute pipeline...");
     auto compute_pipeline = resource_allocator.create(compute_pipeline_desc);
-    
-    spdlog::info("Compute pipeline created, dispatching {} groups", (point_count + 31) / 32);
+
+    spdlog::info(
+        "Compute pipeline created, dispatching {} groups",
+        (point_count + 31) / 32);
 
     auto compute_commandlist = resource_allocator.create(CommandListDesc{});
     compute_commandlist->open();
-    
+
     nvrhi::ComputeState compute_state;
     compute_state.pipeline = compute_pipeline;
     compute_state.bindings = aabb_vars.get_binding_sets();
     compute_commandlist->setComputeState(compute_state);
-    
+
     unsigned dispatch_size = (point_count + 31) / 32;
     compute_commandlist->dispatch(dispatch_size, 1, 1);
     compute_commandlist->close();
     device->executeCommandList(compute_commandlist);
     device->waitForIdle();
-    
+
     spdlog::info("AABB computation completed");
-    
+
     resource_allocator.destroy(compute_shader);
     resource_allocator.destroy(compute_pipeline);
     resource_allocator.destroy(aabb_program);
@@ -593,6 +603,7 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     nvrhi::rt::AccelStructDesc blas_desc;
     nvrhi::rt::GeometryDesc geometry_desc;
     geometry_desc.geometryType = nvrhi::rt::GeometryType::AABBs;
+    geometry_desc.flags = nvrhi::rt::GeometryFlags::NoDuplicateAnyHitInvocation;
     nvrhi::rt::GeometryAABBs aabbs;
     aabbs.setBuffer(aabb_buffer)
         .setOffset(0)
@@ -605,13 +616,12 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
 
     auto blas_build_cmd = device->createCommandList();
     blas_build_cmd->open();
-    nvrhi::utils::BuildBottomLevelAccelStruct(
-        blas_build_cmd, BLAS, blas_desc);
+    nvrhi::utils::BuildBottomLevelAccelStruct(blas_build_cmd, BLAS, blas_desc);
     blas_build_cmd->close();
     device->executeCommandList(blas_build_cmd);
     device->waitForIdle();
     resource_allocator.destroy(blas_build_cmd);
-    
+
     spdlog::info("BLAS built successfully");
 
     // Step 4: Build TLAS
@@ -619,7 +629,7 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     nvrhi::rt::AccelStructDesc tlas_desc;
     tlas_desc.isTopLevel = true;
     tlas_desc.topLevelMaxInstances = 1;
-    
+
     spdlog::info("Creating instance descriptor");
     nvrhi::rt::InstanceDesc instance_desc;
     instance_desc.setBLAS(BLAS);
@@ -628,9 +638,9 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
 
     nvrhi::rt::AffineTransform affine_transform;
     memset(affine_transform, 0, sizeof(nvrhi::rt::AffineTransform));
-    affine_transform[0] = 1.0f;  // [0][0]
-    affine_transform[5] = 1.0f;  // [1][1]
-    affine_transform[10] = 1.0f; // [2][2]
+    affine_transform[0] = 1.0f;   // [0][0]
+    affine_transform[5] = 1.0f;   // [1][1]
+    affine_transform[10] = 1.0f;  // [2][2]
     instance_desc.setTransform(affine_transform);
 
     spdlog::info("Creating TLAS acceleration structure");
@@ -639,23 +649,23 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     spdlog::info("Creating TLAS build command list");
     auto build_commandlist = device->createCommandList();
     build_commandlist->open();
-    
+
     spdlog::info("Building top level accel struct");
     build_commandlist->buildTopLevelAccelStruct(
         TLAS, std::vector{ instance_desc }.data(), 1);
     build_commandlist->close();
-    
+
     spdlog::info("Executing TLAS build");
     device->executeCommandList(build_commandlist);
     device->waitForIdle();
-    
+
     spdlog::info("TLAS built successfully");
 
     // Step 5: Create output buffers for pairs
     spdlog::info("Creating pairs output buffers");
     // Maximum possible pairs (each point could pair with every other point)
     size_t max_pairs = point_count * point_count;
-    
+
     auto pairs_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
             .setByteSize(max_pairs * sizeof(PointPairs))
@@ -691,9 +701,11 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     contact_desc.shaderType = nvrhi::ShaderType::AllRayTracing;
     contact_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/contact.slang");
     auto contact_program = resource_allocator.create(contact_desc);
-    
-    spdlog::info("Contact shader compiled, error string: '{}'", contact_program->get_error_string());
-    
+
+    spdlog::info(
+        "Contact shader compiled, error string: '{}'",
+        contact_program->get_error_string());
+
     if (!contact_program || !contact_program->getBufferPointer()) {
         spdlog::error("contact_program is null or has no buffer!");
         resource_allocator.destroy(contact_program);
@@ -707,10 +719,12 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
         out_pair_count = 0;
         return nullptr;
     }
-    
+
     // Check for shader compilation errors
     if (!contact_program->get_error_string().empty()) {
-        spdlog::error("contact shader compilation failed: {}", contact_program->get_error_string());
+        spdlog::error(
+            "contact shader compilation failed: {}",
+            contact_program->get_error_string());
         resource_allocator.destroy(contact_program);
         resource_allocator.destroy(init_commandlist);
         resource_allocator.destroy(pairs_count_buffer);
@@ -725,7 +739,7 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
 
     spdlog::info("Creating contact ProgramVars");
     ProgramVars contact_vars(resource_allocator, contact_program);
-    
+
     // Create constant buffer for contact shader
     auto contact_radius_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
@@ -734,38 +748,42 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setInitialState(nvrhi::ResourceStates::ConstantBuffer)
             .setKeepInitialState(true)
             .setDebugName("contactRadiusBuffer"));
-    
+
     auto contact_radius_upload = device->createCommandList();
     contact_radius_upload->open();
-    float contact_radius_data[4] = {radius, 0, 0, 0}; // Pad to 16 bytes
-    contact_radius_upload->writeBuffer(contact_radius_buffer, contact_radius_data, sizeof(contact_radius_data));
+    float contact_radius_data[4] = { radius, 0, 0, 0 };  // Pad to 16 bytes
+    contact_radius_upload->writeBuffer(
+        contact_radius_buffer,
+        contact_radius_data,
+        sizeof(contact_radius_data));
     contact_radius_upload->close();
     device->executeCommandList(contact_radius_upload);
     device->waitForIdle();
     resource_allocator.destroy(contact_radius_upload);
-    
+
     spdlog::info("Setting contact shader resources");
     contact_vars["SearchParams"] = contact_radius_buffer;
     contact_vars["SceneBVH"] = TLAS;
     contact_vars["positions"] = position_buffer;
     contact_vars["Pairs"] = pairs_buffer;
     contact_vars["PairsCount"] = pairs_count_buffer;
-    
+
     spdlog::info("Calling finish_setting_vars for contact");
     contact_vars.finish_setting_vars();
 
     RaytracingContext raytracing_context(resource_allocator, contact_vars);
     raytracing_context.announce_raygeneration("RayGen");
-    raytracing_context.announce_hitgroup("ClosestHit", "AnyHit", "Intersection");
+    raytracing_context.announce_hitgroup(
+        "ClosestHit", "AnyHit", "Intersection");
     raytracing_context.announce_miss("Miss");
     raytracing_context.finish_announcing_shader_names();
-    
+
     spdlog::info("Raytracing shaders announced, beginning trace");
 
     raytracing_context.begin();
     raytracing_context.trace_rays({}, contact_vars, point_count, 1, 1);
     raytracing_context.finish();
-    
+
     spdlog::info("Raytracing completed");
 
     // Step 7: Read back the pair count
@@ -785,7 +803,8 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     device->executeCommandList(readback_commandlist);
     device->waitForIdle();
 
-    void* count_data = device->mapBuffer(count_readback_buffer, nvrhi::CpuAccessMode::Read);
+    void* count_data =
+        device->mapBuffer(count_readback_buffer, nvrhi::CpuAccessMode::Read);
     memcpy(&out_pair_count, count_data, sizeof(unsigned));
     device->unmapBuffer(count_readback_buffer);
 
@@ -814,7 +833,8 @@ std::vector<PointPairs> FindNeighbors(
     auto device = RHI::get_device();
 
     // Get the GPU buffer with neighbor pairs
-    auto pairs_buffer = FindNeighborsToBuffer(point_cloud, radius, out_pair_count);
+    auto pairs_buffer =
+        FindNeighborsToBuffer(point_cloud, radius, out_pair_count);
 
     // If we got a null buffer or no pairs found, return empty results
     if (!pairs_buffer || out_pair_count == 0) {
@@ -840,13 +860,18 @@ std::vector<PointPairs> FindNeighbors(
     auto copy_commandlist = device->createCommandList();
     copy_commandlist->open();
     copy_commandlist->copyBuffer(
-        readback_buffer, 0, pairs_buffer, 0, out_pair_count * sizeof(PointPairs));
+        readback_buffer,
+        0,
+        pairs_buffer,
+        0,
+        out_pair_count * sizeof(PointPairs));
     copy_commandlist->close();
     device->executeCommandList(copy_commandlist);
     device->waitForIdle();
 
     // Map and read the results
-    void* mapped_data = device->mapBuffer(readback_buffer, nvrhi::CpuAccessMode::Read);
+    void* mapped_data =
+        device->mapBuffer(readback_buffer, nvrhi::CpuAccessMode::Read);
     memcpy(result.data(), mapped_data, out_pair_count * sizeof(PointPairs));
     device->unmapBuffer(readback_buffer);
 
