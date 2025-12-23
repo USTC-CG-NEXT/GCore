@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <ctime>
 #include <memory>
 
 #include "GCore/Components/MeshComponent.h"
@@ -336,17 +337,16 @@ TEST_F(IntersectionTests, FindNeighborsEmptyPointCloud)
 
 TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_2)
 {
-    // Test box distance with threshold 0.2
-    // Box distance means: all three axis distances < threshold
+    // Test Euclidean distance with threshold 0.2
     Geometry point_cloud = Geometry::CreatePoints();
     auto pointsComp = point_cloud.get_component<PointsComponent>();
 
     // Generate random points
     std::vector<glm::vec3> vertices;
-    const int num_points = 50;
+    const int num_points = 1000;
     const float search_radius = 0.2f;
-    
-    std::srand(12345);  // Fixed seed for reproducibility
+
+    std::srand(static_cast<unsigned>(std::time(nullptr)));  // Use time as seed
     for (int i = 0; i < num_points; ++i) {
         float x = (std::rand() % 1000) / 1000.0f;  // [0, 1)
         float y = (std::rand() % 1000) / 1000.0f;
@@ -356,19 +356,17 @@ TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_2)
 
     pointsComp->set_vertices(vertices);
 
-    // Compute expected pairs on CPU using the same criterion
+    // Compute expected pairs on CPU using Euclidean distance
     std::set<std::pair<unsigned, unsigned>> expected_pairs;
     for (unsigned i = 0; i < vertices.size(); ++i) {
         for (unsigned j = i + 1; j < vertices.size(); ++j) {
             glm::vec3 pos1 = vertices[i];
             glm::vec3 pos2 = vertices[j];
-            
-            float dx = std::abs(pos1.x - pos2.x);
-            float dy = std::abs(pos1.y - pos2.y);
-            float dz = std::abs(pos1.z - pos2.z);
-            
-            // All three axis distances must be < threshold
-            if (dx < search_radius && dy < search_radius && dz < search_radius) {
+
+            float dist = glm::length(pos1 - pos2);
+
+            // Use Euclidean distance
+            if (dist < search_radius) {
                 expected_pairs.insert(std::make_pair(i, j));
             }
         }
@@ -379,8 +377,10 @@ TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_2)
     std::vector<PointPairs> pairs =
         FindNeighbors(point_cloud, search_radius, pair_count);
 
-    std::cout << "Box distance test (threshold=" << search_radius << "): " << std::endl;
-    std::cout << "  CPU found " << expected_pairs.size() << " pairs" << std::endl;
+    std::cout << "Euclidean distance test (threshold=" << search_radius
+              << "): " << std::endl;
+    std::cout << "  CPU found " << expected_pairs.size() << " pairs"
+              << std::endl;
     std::cout << "  GPU found " << pair_count << " pairs" << std::endl;
 
     // Convert GPU results to set for comparison
@@ -393,57 +393,58 @@ TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_2)
 
     // Verify GPU and CPU results match
     EXPECT_EQ(gpu_pairs.size(), expected_pairs.size());
-    
+
     // Check all expected pairs are found by GPU
     for (const auto& pair : expected_pairs) {
         if (gpu_pairs.count(pair) == 0) {
             glm::vec3 pos1 = vertices[pair.first];
             glm::vec3 pos2 = vertices[pair.second];
-            float dx = std::abs(pos1.x - pos2.x);
-            float dy = std::abs(pos1.y - pos2.y);
-            float dz = std::abs(pos1.z - pos2.z);
-            std::cout << "  Missing pair (" << pair.first << ", " << pair.second << "):" << std::endl;
-            std::cout << "    pos1=(" << pos1.x << ", " << pos1.y << ", " << pos1.z << ")" << std::endl;
-            std::cout << "    pos2=(" << pos2.x << ", " << pos2.y << ", " << pos2.z << ")" << std::endl;
-            std::cout << "    dx=" << dx << ", dy=" << dy << ", dz=" << dz << std::endl;
+            float dist = glm::length(pos1 - pos2);
+            std::cout << "  Missing pair (" << pair.first << ", " << pair.second
+                      << "):" << std::endl;
+            std::cout << "    pos1=(" << pos1.x << ", " << pos1.y << ", "
+                      << pos1.z << ")" << std::endl;
+            std::cout << "    pos2=(" << pos2.x << ", " << pos2.y << ", "
+                      << pos2.z << ")" << std::endl;
+            std::cout << "    distance=" << dist << std::endl;
         }
-        EXPECT_TRUE(gpu_pairs.count(pair) > 0) 
-            << "CPU found pair (" << pair.first << ", " << pair.second 
+        EXPECT_TRUE(gpu_pairs.count(pair) > 0)
+            << "CPU found pair (" << pair.first << ", " << pair.second
             << ") but GPU didn't";
     }
-    
+
     // Check GPU didn't find extra pairs
     for (const auto& pair : gpu_pairs) {
         if (expected_pairs.count(pair) == 0) {
             glm::vec3 pos1 = vertices[pair.first];
             glm::vec3 pos2 = vertices[pair.second];
-            float dx = std::abs(pos1.x - pos2.x);
-            float dy = std::abs(pos1.y - pos2.y);
-            float dz = std::abs(pos1.z - pos2.z);
-            std::cout << "  Extra pair (" << pair.first << ", " << pair.second << "):" << std::endl;
-            std::cout << "    pos1=(" << pos1.x << ", " << pos1.y << ", " << pos1.z << ")" << std::endl;
-            std::cout << "    pos2=(" << pos2.x << ", " << pos2.y << ", " << pos2.z << ")" << std::endl;
-            std::cout << "    dx=" << dx << ", dy=" << dy << ", dz=" << dz << std::endl;
+            float dist = glm::length(pos1 - pos2);
+            std::cout << "  Extra pair (" << pair.first << ", " << pair.second
+                      << "):" << std::endl;
+            std::cout << "    pos1=(" << pos1.x << ", " << pos1.y << ", "
+                      << pos1.z << ")" << std::endl;
+            std::cout << "    pos2=(" << pos2.x << ", " << pos2.y << ", "
+                      << pos2.z << ")" << std::endl;
+            std::cout << "    distance=" << dist << std::endl;
         }
         EXPECT_TRUE(expected_pairs.count(pair) > 0)
-            << "GPU found pair (" << pair.first << ", " << pair.second 
+            << "GPU found pair (" << pair.first << ", " << pair.second
             << ") but CPU didn't";
     }
 }
 
 TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_1)
 {
-    // Test box distance with threshold 0.1
-    // Box distance means: all three axis distances < threshold
+    // Test Euclidean distance with threshold 0.1
     Geometry point_cloud = Geometry::CreatePoints();
     auto pointsComp = point_cloud.get_component<PointsComponent>();
 
     // Generate random points
     std::vector<glm::vec3> vertices;
-    const int num_points = 100;
+    const int num_points = 1000;
     const float search_radius = 0.1f;
-    
-    std::srand(54321);  // Fixed seed for reproducibility
+
+    std::srand(static_cast<unsigned>(std::time(nullptr)));  // Use time as seed
     for (int i = 0; i < num_points; ++i) {
         float x = (std::rand() % 1000) / 1000.0f;  // [0, 1)
         float y = (std::rand() % 1000) / 1000.0f;
@@ -453,19 +454,17 @@ TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_1)
 
     pointsComp->set_vertices(vertices);
 
-    // Compute expected pairs on CPU using the same criterion
+    // Compute expected pairs on CPU using Euclidean distance
     std::set<std::pair<unsigned, unsigned>> expected_pairs;
     for (unsigned i = 0; i < vertices.size(); ++i) {
         for (unsigned j = i + 1; j < vertices.size(); ++j) {
             glm::vec3 pos1 = vertices[i];
             glm::vec3 pos2 = vertices[j];
-            
-            float dx = std::abs(pos1.x - pos2.x);
-            float dy = std::abs(pos1.y - pos2.y);
-            float dz = std::abs(pos1.z - pos2.z);
-            
-            // All three axis distances must be < threshold
-            if (dx < search_radius && dy < search_radius && dz < search_radius) {
+
+            float dist = glm::length(pos1 - pos2);
+
+            // Use Euclidean distance
+            if (dist < search_radius) {
                 expected_pairs.insert(std::make_pair(i, j));
             }
         }
@@ -476,8 +475,10 @@ TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_1)
     std::vector<PointPairs> pairs =
         FindNeighbors(point_cloud, search_radius, pair_count);
 
-    std::cout << "Box distance test (threshold=" << search_radius << "): " << std::endl;
-    std::cout << "  CPU found " << expected_pairs.size() << " pairs" << std::endl;
+    std::cout << "Euclidean distance test (threshold=" << search_radius
+              << "): " << std::endl;
+    std::cout << "  CPU found " << expected_pairs.size() << " pairs"
+              << std::endl;
     std::cout << "  GPU found " << pair_count << " pairs" << std::endl;
 
     // Convert GPU results to set for comparison
@@ -490,40 +491,42 @@ TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_1)
 
     // Verify GPU and CPU results match
     EXPECT_EQ(gpu_pairs.size(), expected_pairs.size());
-    
+
     // Check all expected pairs are found by GPU
     for (const auto& pair : expected_pairs) {
         if (gpu_pairs.count(pair) == 0) {
             glm::vec3 pos1 = vertices[pair.first];
             glm::vec3 pos2 = vertices[pair.second];
-            float dx = std::abs(pos1.x - pos2.x);
-            float dy = std::abs(pos1.y - pos2.y);
-            float dz = std::abs(pos1.z - pos2.z);
-            std::cout << "  Missing pair (" << pair.first << ", " << pair.second << "):" << std::endl;
-            std::cout << "    pos1=(" << pos1.x << ", " << pos1.y << ", " << pos1.z << ")" << std::endl;
-            std::cout << "    pos2=(" << pos2.x << ", " << pos2.y << ", " << pos2.z << ")" << std::endl;
-            std::cout << "    dx=" << dx << ", dy=" << dy << ", dz=" << dz << std::endl;
+            float dist = glm::length(pos1 - pos2);
+            std::cout << "  Missing pair (" << pair.first << ", " << pair.second
+                      << "):" << std::endl;
+            std::cout << "    pos1=(" << pos1.x << ", " << pos1.y << ", "
+                      << pos1.z << ")" << std::endl;
+            std::cout << "    pos2=(" << pos2.x << ", " << pos2.y << ", "
+                      << pos2.z << ")" << std::endl;
+            std::cout << "    distance=" << dist << std::endl;
         }
-        EXPECT_TRUE(gpu_pairs.count(pair) > 0) 
-            << "CPU found pair (" << pair.first << ", " << pair.second 
+        EXPECT_TRUE(gpu_pairs.count(pair) > 0)
+            << "CPU found pair (" << pair.first << ", " << pair.second
             << ") but GPU didn't";
     }
-    
+
     // Check GPU didn't find extra pairs
     for (const auto& pair : gpu_pairs) {
         if (expected_pairs.count(pair) == 0) {
             glm::vec3 pos1 = vertices[pair.first];
             glm::vec3 pos2 = vertices[pair.second];
-            float dx = std::abs(pos1.x - pos2.x);
-            float dy = std::abs(pos1.y - pos2.y);
-            float dz = std::abs(pos1.z - pos2.z);
-            std::cout << "  Extra pair (" << pair.first << ", " << pair.second << "):" << std::endl;
-            std::cout << "    pos1=(" << pos1.x << ", " << pos1.y << ", " << pos1.z << ")" << std::endl;
-            std::cout << "    pos2=(" << pos2.x << ", " << pos2.y << ", " << pos2.z << ")" << std::endl;
-            std::cout << "    dx=" << dx << ", dy=" << dy << ", dz=" << dz << std::endl;
+            float dist = glm::length(pos1 - pos2);
+            std::cout << "  Extra pair (" << pair.first << ", " << pair.second
+                      << "):" << std::endl;
+            std::cout << "    pos1=(" << pos1.x << ", " << pos1.y << ", "
+                      << pos1.z << ")" << std::endl;
+            std::cout << "    pos2=(" << pos2.x << ", " << pos2.y << ", "
+                      << pos2.z << ")" << std::endl;
+            std::cout << "    distance=" << dist << std::endl;
         }
         EXPECT_TRUE(expected_pairs.count(pair) > 0)
-            << "GPU found pair (" << pair.first << ", " << pair.second 
+            << "GPU found pair (" << pair.first << ", " << pair.second
             << ") but CPU didn't";
     }
 }
