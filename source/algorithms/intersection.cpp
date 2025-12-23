@@ -5,6 +5,7 @@
 #include "GCore/Components/XformComponent.h"
 
 #ifdef GPU_GEOM_ALGORITHM
+#include "GPUContext/compute_context.hpp"
 #include "GPUContext/program_vars.hpp"
 #include "GPUContext/raytracing_context.hpp"
 #include "RHI/ResourceManager/resource_allocator.hpp"
@@ -555,47 +556,23 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     spdlog::info("Calling finish_setting_vars...");
     aabb_vars.finish_setting_vars();
 
-    spdlog::info("ProgramVars configured, creating compute shader");
+    spdlog::info("ProgramVars configured, creating ComputeContext");
 
-    // Create compute pipeline
-    ShaderHandle compute_shader = resource_allocator.create(
-        aabb_program->get_shader_desc(),
-        aabb_program->getBufferPointer(),
-        aabb_program->getBufferSize());
-
-    spdlog::info("Compute shader created, setting up pipeline");
-
-    nvrhi::ComputePipelineDesc compute_pipeline_desc;
-    compute_pipeline_desc.CS = compute_shader;
-    compute_pipeline_desc.bindingLayouts = aabb_vars.get_binding_layout();
-
-    spdlog::info("Creating compute pipeline...");
-    auto compute_pipeline = resource_allocator.create(compute_pipeline_desc);
+    // Use ComputeContext to simplify pipeline creation and dispatch
+    ComputeContext compute_context(resource_allocator, aabb_vars);
+    compute_context.finish_setting_pso();
 
     spdlog::info(
-        "Compute pipeline created, dispatching {} groups",
+        "ComputeContext created, dispatching {} thread groups",
         (point_count + 31) / 32);
 
-    auto compute_commandlist = resource_allocator.create(CommandListDesc{});
-    compute_commandlist->open();
-
-    nvrhi::ComputeState compute_state;
-    compute_state.pipeline = compute_pipeline;
-    compute_state.bindings = aabb_vars.get_binding_sets();
-    compute_commandlist->setComputeState(compute_state);
-
-    unsigned dispatch_size = (point_count + 31) / 32;
-    compute_commandlist->dispatch(dispatch_size, 1, 1);
-    compute_commandlist->close();
-    device->executeCommandList(compute_commandlist);
-    device->waitForIdle();
+    compute_context.begin();
+    compute_context.dispatch({}, aabb_vars, point_count, 32);
+    compute_context.finish();
 
     spdlog::info("AABB computation completed");
 
-    resource_allocator.destroy(compute_shader);
-    resource_allocator.destroy(compute_pipeline);
     resource_allocator.destroy(aabb_program);
-    resource_allocator.destroy(compute_commandlist);
     resource_allocator.destroy(radius_buffer);
 
     // Step 3: Build BLAS with AABBs for procedural geometry
