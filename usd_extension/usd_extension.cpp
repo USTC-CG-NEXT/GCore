@@ -363,6 +363,11 @@ bool write_geometry_to_usd(
                     transforms[i][3][1],
                     transforms[i][3][2]);
             }
+            // Clear orientation attribute when rotations are disabled
+            auto orientations_attr = instancer_component.GetOrientationsAttr();
+            if (orientations_attr) {
+                orientations_attr.Block();
+            }
         }
         else {
             // Full path: decompose matrices for positions, orientations, and

@@ -589,7 +589,7 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     geometry_desc.setAABBs(aabbs);
     blas_desc.addBottomLevelGeometry(geometry_desc);
     blas_desc.isTopLevel = false;
-    auto BLAS = device->createAccelStruct(blas_desc);
+    auto BLAS = resource_allocator.create(blas_desc);
 
     auto blas_build_cmd = device->createCommandList();
     blas_build_cmd->open();
@@ -621,7 +621,7 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     instance_desc.setTransform(affine_transform);
 
     spdlog::info("Creating TLAS acceleration structure");
-    auto TLAS = device->createAccelStruct(tlas_desc);
+    auto TLAS = resource_allocator.create(tlas_desc);
 
     spdlog::info("Creating TLAS build command list");
     auto build_commandlist = device->createCommandList();
