@@ -349,57 +349,65 @@ bool write_geometry_to_usd(
             pxr::UsdGeomPointInstancer::Define(stage, sdf_path);
         instancer_component.CreatePrototypesRel().SetTargets({ actual_path });
 
-        auto transforms = instancer->get_instances();
+        const auto& positions_glm = instancer->get_positions();
+        const auto& orientations_glm = instancer->get_orientations();
+        const auto& scales_glm = instancer->get_scales();
+        
+        size_t instance_count = instancer->get_instance_count();
 
-        pxr::VtVec3fArray positions = pxr::VtVec3fArray(transforms.size());
+        // Convert positions directly
+        pxr::VtVec3fArray positions(instance_count);
+        for (size_t i = 0; i < instance_count; ++i) {
+            positions[i] = pxr::GfVec3f(
+                positions_glm[i].x,
+                positions_glm[i].y,
+                positions_glm[i].z);
+        }
 
-        // Fast path: if no rotations, directly extract positions
-        if (!instancer->has_rotations_enabled()) {
-            for (size_t i = 0; i < transforms.size(); ++i) {
-                // Directly extract translation from the last column of the
-                // matrix
-                positions[i] = pxr::GfVec3f(
-                    transforms[i][3][0],
-                    transforms[i][3][1],
-                    transforms[i][3][2]);
+        // Handle orientations if rotations are enabled
+        if (instancer->has_rotations_enabled()) {
+            // Only write orientations if array is not empty
+            if (!orientations_glm.empty()) {
+                pxr::VtQuathArray orientations(instance_count);
+                for (size_t i = 0; i < instance_count; ++i) {
+                    const auto& q = orientations_glm[i];
+                    orientations[i] = pxr::GfQuath(q.w, q.x, q.y, q.z);
+                }
+                instancer_component.CreateOrientationsAttr().Set(orientations, time);
             }
+            else {
+                // No orientations data, clear the attribute
+                auto orientations_attr = instancer_component.GetOrientationsAttr();
+                if (orientations_attr) {
+                    orientations_attr.Block();
+                }
+            }
+            
+            // Only write scales if array is not empty
+            if (!scales_glm.empty()) {
+                pxr::VtVec3fArray scales(instance_count);
+                for (size_t i = 0; i < instance_count; ++i) {
+                    scales[i] = pxr::GfVec3f(
+                        scales_glm[i].x,
+                        scales_glm[i].y,
+                        scales_glm[i].z);
+                }
+                instancer_component.CreateScalesAttr().Set(scales, time);
+            }
+            else {
+                // No scales data, clear the attribute
+                auto scales_attr = instancer_component.GetScalesAttr();
+                if (scales_attr) {
+                    scales_attr.Block();
+                }
+            }
+        }
+        else {
             // Clear orientation attribute when rotations are disabled
             auto orientations_attr = instancer_component.GetOrientationsAttr();
             if (orientations_attr) {
                 orientations_attr.Block();
             }
-        }
-        else {
-            // Full path: decompose matrices for positions, orientations, and
-            // scales
-            pxr::VtQuathArray orientations =
-                pxr::VtQuathArray(transforms.size());
-            pxr::VtVec3fArray scales = pxr::VtVec3fArray(transforms.size());
-
-            for (size_t i = 0; i < transforms.size(); ++i) {
-                glm::vec3 translation;
-                glm::quat rotation;
-                glm::vec3 scale;
-
-                // Decompose GLM matrix
-                glm::vec3 skew;
-                glm::vec4 perspective;
-                glm::decompose(
-                    transforms[i],
-                    scale,
-                    rotation,
-                    translation,
-                    skew,
-                    perspective);
-
-                positions[i] =
-                    pxr::GfVec3f(translation.x, translation.y, translation.z);
-                orientations[i] = pxr::GfQuath(
-                    rotation.w, rotation.x, rotation.y, rotation.z);
-                scales[i] = pxr::GfVec3f(scale.x, scale.y, scale.z);
-            }
-            instancer_component.CreateOrientationsAttr().Set(
-                orientations, time);
         }
 
         instancer_component.CreateProtoIndicesAttr().Set(
