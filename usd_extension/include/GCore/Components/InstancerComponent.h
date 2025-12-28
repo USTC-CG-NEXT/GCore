@@ -44,7 +44,7 @@ class GEOMETRY_API InstancerComponent final : public GeometryComponent {
     const std::vector<glm::vec3>& get_positions() const { return positions_; }
     const std::vector<glm::quat>& get_orientations() const { return orientations_; }
     const std::vector<glm::vec3>& get_scales() const { return scales_; }
-    pxr::VtArray<int> get_proto_indices();
+    pxr::VtArray<int> get_proto_indices() const;
 
     bool has_rotations_enabled() const
     {

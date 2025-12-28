@@ -352,16 +352,14 @@ bool write_geometry_to_usd(
         const auto& positions_glm = instancer->get_positions();
         const auto& orientations_glm = instancer->get_orientations();
         const auto& scales_glm = instancer->get_scales();
-        
+
         size_t instance_count = instancer->get_instance_count();
 
         // Convert positions directly
         pxr::VtVec3fArray positions(instance_count);
         for (size_t i = 0; i < instance_count; ++i) {
             positions[i] = pxr::GfVec3f(
-                positions_glm[i].x,
-                positions_glm[i].y,
-                positions_glm[i].z);
+                positions_glm[i].x, positions_glm[i].y, positions_glm[i].z);
         }
 
         // Handle orientations if rotations are enabled
@@ -373,24 +371,24 @@ bool write_geometry_to_usd(
                     const auto& q = orientations_glm[i];
                     orientations[i] = pxr::GfQuath(q.w, q.x, q.y, q.z);
                 }
-                instancer_component.CreateOrientationsAttr().Set(orientations, time);
+                instancer_component.CreateOrientationsAttr().Set(
+                    orientations, time);
             }
             else {
                 // No orientations data, clear the attribute
-                auto orientations_attr = instancer_component.GetOrientationsAttr();
+                auto orientations_attr =
+                    instancer_component.GetOrientationsAttr();
                 if (orientations_attr) {
                     orientations_attr.Block();
                 }
             }
-            
+
             // Only write scales if array is not empty
             if (!scales_glm.empty()) {
                 pxr::VtVec3fArray scales(instance_count);
                 for (size_t i = 0; i < instance_count; ++i) {
                     scales[i] = pxr::GfVec3f(
-                        scales_glm[i].x,
-                        scales_glm[i].y,
-                        scales_glm[i].z);
+                        scales_glm[i].x, scales_glm[i].y, scales_glm[i].z);
                 }
                 instancer_component.CreateScalesAttr().Set(scales, time);
             }

@@ -42,14 +42,14 @@ struct GEOMETRY_API MaterialComponent : public GeometryComponent {
 
     pxr::UsdShadeMaterial define_material(
         pxr::UsdStageRefPtr stage,
-        pxr::SdfPath path);
+        pxr::SdfPath path) const;
 
     void set_materialx_path(pxr::SdfPath path)
     {
         mtlx_material_path = path;
     }
 
-    pxr::SdfPath get_material_path();
+    pxr::SdfPath get_material_path() const;
 
     std::vector<std::string> textures;
 

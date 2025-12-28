@@ -33,7 +33,7 @@ class GEOMETRY_API VolumeComponent : public GeometryComponent {
     void add_grid(openvdb::FloatGrid::Ptr grid);
 
     void apply_transform(const glm::mat4& transform) override;
-    void write_disk(const std::string& file_name);
+    void write_disk(const std::string& file_name) const;
     openvdb::GridBase::Ptr get_grid();
 
    private:

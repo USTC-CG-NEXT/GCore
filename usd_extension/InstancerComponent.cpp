@@ -101,7 +101,7 @@ void InstancerComponent::reserve_instances(size_t count)
     scales_.reserve(count);
 }
 
-pxr::VtArray<int> InstancerComponent::get_proto_indices()
+pxr::VtArray<int> InstancerComponent::get_proto_indices() const
 {
     return pxr::VtArray<int>(positions_.size(), 0);
 }

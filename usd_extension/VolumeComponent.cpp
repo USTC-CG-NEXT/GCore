@@ -25,7 +25,7 @@ void VolumeComponent::apply_transform(const glm::mat4& transform)
         "VolumeComponent::apply_transform not implemented");
 }
 
-void VolumeComponent::write_disk(const std::string& file_name)
+void VolumeComponent::write_disk(const std::string& file_name) const
 {
     openvdb::io::File file(file_name);
     openvdb::GridPtrVec grids;

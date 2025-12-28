@@ -5,7 +5,7 @@
 USTC_CG_NAMESPACE_OPEN_SCOPE
 pxr::UsdShadeMaterial MaterialComponent::define_material(
     pxr::UsdStageRefPtr stage,
-    pxr::SdfPath path)
+    pxr::SdfPath path) const
 {
     auto material_path = get_material_path();
     auto texture_name = std::string(textures[0].c_str());
@@ -66,7 +66,7 @@ pxr::UsdShadeMaterial MaterialComponent::define_material(
     return material;
 }
 
-pxr::SdfPath MaterialComponent::get_material_path()
+pxr::SdfPath MaterialComponent::get_material_path() const
 {
     auto texture_name = std::string(textures[0].c_str());
     std::filesystem::path p =

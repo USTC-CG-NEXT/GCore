@@ -51,27 +51,41 @@ class GEOMETRY_API Geometry {
 
     [[nodiscard]] size_t hash() const;
 
+    // Non-const version: may trigger copy-on-write
     template<typename OperandType>
-    std::shared_ptr<OperandType> get_component(size_t idx = 0) const;
+    std::shared_ptr<OperandType> get_component(size_t idx = 0);
+
+    // Const version: read-only on Geometry itself, but returns mutable
+    // component (for backward compatibility)
+    template<typename OperandType>
+    std::shared_ptr<const OperandType> get_component(size_t idx = 0) const;
+
+    template<typename OperandType>
+    std::shared_ptr<const OperandType> get_const_component(size_t idx = 0);
+
     void attach_component(const GeometryComponentHandle& component);
     void detach_component(const GeometryComponentHandle& component);
 
     [[nodiscard]] const std::vector<GeometryComponentHandle>& get_components()
         const
     {
-        return components_;
+        return *components_;
     }
 
    protected:
-    std::vector<GeometryComponentHandle> components_;
+    void detach_shared_components();
+
+    std::shared_ptr<std::vector<GeometryComponentHandle>> components_;
 };
 
 template<typename OperandType>
-std::shared_ptr<OperandType> Geometry::get_component(size_t idx) const
+std::shared_ptr<OperandType> Geometry::get_component(size_t idx)
 {
+    detach_shared_components();
+
     size_t counter = 0;
-    for (int i = 0; i < components_.size(); ++i) {
-        auto ptr = std::dynamic_pointer_cast<OperandType>(components_[i]);
+    for (int i = 0; i < components_->size(); ++i) {
+        auto ptr = std::dynamic_pointer_cast<OperandType>((*components_)[i]);
         if (ptr) {
             if (counter < idx) {
                 counter++;
@@ -82,6 +96,31 @@ std::shared_ptr<OperandType> Geometry::get_component(size_t idx) const
         }
     }
     return nullptr;
+}
+
+template<typename OperandType>
+std::shared_ptr<const OperandType> Geometry::get_component(size_t idx) const
+{
+    // Const version doesn't trigger COW, just returns the component
+    size_t counter = 0;
+    for (int i = 0; i < components_->size(); ++i) {
+        auto ptr = std::dynamic_pointer_cast<OperandType>((*components_)[i]);
+        if (ptr) {
+            if (counter < idx) {
+                counter++;
+            }
+            else {
+                return ptr;
+            }
+        }
+    }
+    return nullptr;
+}
+
+template<typename OperandType>
+std::shared_ptr<const OperandType> Geometry::get_const_component(size_t idx)
+{
+    return const_cast<const Geometry*>(this)->get_component<OperandType>(idx);
 }
 
 USTC_CG_NAMESPACE_CLOSE_SCOPE
