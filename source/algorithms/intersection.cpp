@@ -486,11 +486,6 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
         .set_entry_name("main")
         .set_shader_type(nvrhi::ShaderType::Compute);
 
-    spdlog::info(
-        "Compiling toAABB shader from path: {}",
-        GEOM_COMPUTE_SHADER_DIR "Points/toAABB.slang");
-    spdlog::info("Entry name: main, ShaderType: Compute");
-
     auto aabb_program = resource_allocator.create(aabb_desc);
 
     // Check for shader compilation errors
@@ -504,8 +499,6 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
         out_pair_count = 0;
         return nullptr;
     }
-
-    spdlog::info("toAABB shader compiled successfully");
 
     if (!aabb_program) {
         spdlog::error("aabb_program is null!");
@@ -523,8 +516,6 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
         out_pair_count = 0;
         return nullptr;
     }
-
-    spdlog::info("Creating ProgramVars...");
 
     ProgramVars aabb_vars(resource_allocator, aabb_program);
 
@@ -548,35 +539,24 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     device->waitForIdle();
     resource_allocator.destroy(radius_upload_cmd);
 
-    spdlog::info("Setting shader resources...");
     aabb_vars["SearchParams"] = radius_buffer;
     aabb_vars["positions"] = position_buffer;
     aabb_vars["AABBs"] = aabb_buffer;
 
-    spdlog::info("Calling finish_setting_vars...");
     aabb_vars.finish_setting_vars();
-
-    spdlog::info("ProgramVars configured, creating ComputeContext");
 
     // Use ComputeContext to simplify pipeline creation and dispatch
     ComputeContext compute_context(resource_allocator, aabb_vars);
     compute_context.finish_setting_pso();
 
-    spdlog::info(
-        "ComputeContext created, dispatching {} thread groups",
-        (point_count + 31) / 32);
-
     compute_context.begin();
     compute_context.dispatch({}, aabb_vars, point_count, 32);
     compute_context.finish();
-
-    spdlog::info("AABB computation completed");
 
     resource_allocator.destroy(aabb_program);
     resource_allocator.destroy(radius_buffer);
 
     // Step 3: Build BLAS with AABBs for procedural geometry
-    spdlog::info("Building BLAS with {} AABBs", point_count);
     nvrhi::rt::AccelStructDesc blas_desc;
     nvrhi::rt::GeometryDesc geometry_desc;
     geometry_desc.geometryType = nvrhi::rt::GeometryType::AABBs;
@@ -599,15 +579,11 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     device->waitForIdle();
     resource_allocator.destroy(blas_build_cmd);
 
-    spdlog::info("BLAS built successfully");
-
     // Step 4: Build TLAS
-    spdlog::info("Building TLAS");
     nvrhi::rt::AccelStructDesc tlas_desc;
     tlas_desc.isTopLevel = true;
     tlas_desc.topLevelMaxInstances = 1;
 
-    spdlog::info("Creating instance descriptor");
     nvrhi::rt::InstanceDesc instance_desc;
     instance_desc.setBLAS(BLAS);
     instance_desc.setInstanceID(0);
@@ -620,26 +596,18 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     affine_transform[10] = 1.0f;  // [2][2]
     instance_desc.setTransform(affine_transform);
 
-    spdlog::info("Creating TLAS acceleration structure");
     auto TLAS = resource_allocator.create(tlas_desc);
 
-    spdlog::info("Creating TLAS build command list");
     auto build_commandlist = device->createCommandList();
     build_commandlist->open();
 
-    spdlog::info("Building top level accel struct");
     build_commandlist->buildTopLevelAccelStruct(
         TLAS, std::vector{ instance_desc }.data(), 1);
     build_commandlist->close();
 
-    spdlog::info("Executing TLAS build");
     device->executeCommandList(build_commandlist);
-    device->waitForIdle();
-
-    spdlog::info("TLAS built successfully");
 
     // Step 5: Create output buffers for pairs
-    spdlog::info("Creating pairs output buffers");
     // Maximum possible pairs (each point could pair with every other point)
     size_t max_pairs = point_count * 30;
 
@@ -652,7 +620,6 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setCanHaveUAVs(true)
             .setDebugName("pairsBuffer"));
 
-    spdlog::info("Creating pairs count buffer");
     auto pairs_count_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
             .setByteSize(sizeof(unsigned))
@@ -662,7 +629,6 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setCanHaveUAVs(true)
             .setDebugName("pairsCountBuffer"));
 
-    spdlog::info("Initializing counter to 0");
     // Initialize counter to 0
     auto init_commandlist = device->createCommandList();
     init_commandlist->open();
@@ -672,16 +638,11 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     device->executeCommandList(init_commandlist);
     device->waitForIdle();
 
-    spdlog::info("Compiling contact shader");
     // Step 6: Run contact.slang ray tracing shader
     ProgramDesc contact_desc;
     contact_desc.shaderType = nvrhi::ShaderType::AllRayTracing;
     contact_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/contact.slang");
     auto contact_program = resource_allocator.create(contact_desc);
-
-    spdlog::info(
-        "Contact shader compiled, error string: '{}'",
-        contact_program->get_error_string());
 
     if (!contact_program || !contact_program->getBufferPointer()) {
         spdlog::error("contact_program is null or has no buffer!");
@@ -714,7 +675,6 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
         return nullptr;
     }
 
-    spdlog::info("Creating contact ProgramVars");
     ProgramVars contact_vars(resource_allocator, contact_program);
 
     // Create constant buffer for contact shader
@@ -738,14 +698,12 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     device->waitForIdle();
     resource_allocator.destroy(contact_radius_upload);
 
-    spdlog::info("Setting contact shader resources");
     contact_vars["SearchParams"] = contact_radius_buffer;
     contact_vars["SceneBVH"] = TLAS;
     contact_vars["positions"] = position_buffer;
     contact_vars["Pairs"] = pairs_buffer;
     contact_vars["PairsCount"] = pairs_count_buffer;
 
-    spdlog::info("Calling finish_setting_vars for contact");
     contact_vars.finish_setting_vars();
 
     RaytracingContext raytracing_context(resource_allocator, contact_vars);
@@ -755,13 +713,9 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     raytracing_context.announce_miss("Miss");
     raytracing_context.finish_announcing_shader_names();
 
-    spdlog::info("Raytracing shaders announced, beginning trace");
-
     raytracing_context.begin();
     raytracing_context.trace_rays({}, contact_vars, point_count, 1, 1);
     raytracing_context.finish();
-
-    spdlog::info("Raytracing completed");
 
     // Step 7: Read back the pair count
     auto count_readback_buffer = resource_allocator.create(
