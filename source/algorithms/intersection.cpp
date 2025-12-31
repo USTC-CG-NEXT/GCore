@@ -103,17 +103,16 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
 
     auto vertexBuffer = device->createBuffer(desc);
 
-    // Create command list and copy data
-    auto copy_commandlist =
-        device->createCommandList({ .enableImmediateExecution = false });
-    copy_commandlist->open();
+    // Create single command list for all operations
+    auto commandlist = resource_allocator_.create(CommandListDesc{});
+    commandlist->open();
 
     // Copy vertices
-    copy_commandlist->writeBuffer(
+    commandlist->writeBuffer(
         vertexBuffer, vertices.data(), vertices.size() * 3 * sizeof(float), 0);
 
     // Copy indices
-    copy_commandlist->writeBuffer(
+    commandlist->writeBuffer(
         vertexBuffer,
         indices.data(),
         indices.size() * sizeof(int),
@@ -121,7 +120,7 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
 
     // Copy normals if available
     if (!normals.empty()) {
-        copy_commandlist->writeBuffer(
+        commandlist->writeBuffer(
             vertexBuffer,
             normals.data(),
             normals.size() * 3 * sizeof(float),
@@ -130,15 +129,16 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
 
     // Copy UVs if available
     if (!uvs.empty()) {
-        copy_commandlist->writeBuffer(
+        commandlist->writeBuffer(
             vertexBuffer,
             uvs.data(),
             uvs.size() * 2 * sizeof(float),
             texcoord_buffer_offset);
     }
 
-    copy_commandlist->close();
-    device->executeCommandList(copy_commandlist);
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
 
     // Set up mesh_desc
     mesh_desc.vbOffset = 0;
@@ -167,12 +167,11 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     blas_desc.isTopLevel = false;
     auto BLAS = device->createAccelStruct(blas_desc);
 
-    auto buildCommandList = device->createCommandList();
-    buildCommandList->open();
+    commandlist->open();
     nvrhi::utils::BuildBottomLevelAccelStruct(
-        buildCommandList, BLAS, blas_desc);
-    buildCommandList->close();
-    device->executeCommandList(buildCommandList);
+        commandlist, BLAS, blas_desc);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
 
     // Now create TLAS
@@ -195,13 +194,15 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
 
     auto TLAS = device->createAccelStruct(tlas_desc);
 
-    buildCommandList = device->createCommandList();
-    buildCommandList->open();
-    buildCommandList->buildTopLevelAccelStruct(
+    commandlist->open();
+    commandlist->buildTopLevelAccelStruct(
         TLAS, std::vector{ instance_desc }.data(), 1);
-    buildCommandList->close();
-    device->executeCommandList(buildCommandList);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
+
+    // Clean up commandlist
+    resource_allocator_.destroy(commandlist);
 
     // Fill output parameters if provided
     if (out_mesh_desc) {
@@ -338,12 +339,12 @@ std::vector<PointSample> IntersectWithBuffer(
             .setDebugName("resultReadbackBuffer"));
 
     // Create command list to copy data
-    auto copy_commandlist = device->createCommandList();
-    copy_commandlist->open();
-    copy_commandlist->copyBuffer(
+    auto commandlist = resource_allocator.create(CommandListDesc{});
+    commandlist->open();
+    commandlist->copyBuffer(
         readback_buffer, 0, result_buffer, 0, ray_count * sizeof(PointSample));
-    copy_commandlist->close();
-    device->executeCommandList(copy_commandlist);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
 
     // Map and read the results
@@ -355,7 +356,7 @@ std::vector<PointSample> IntersectWithBuffer(
     // Clean up resources
     resource_allocator.destroy(result_buffer);
     resource_allocator.destroy(readback_buffer);
-    resource_allocator.destroy(copy_commandlist);
+    resource_allocator.destroy(commandlist);
 
     return result;
 }
@@ -448,6 +449,9 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
 
     size_t point_count = positions.size();
 
+    // Create single command list for all operations
+    auto commandlist = resource_allocator.create(CommandListDesc{});
+
     // Step 1: Create position buffer (structured buffer)
     auto position_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
@@ -458,15 +462,12 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setDebugName("positionBuffer"));
 
     // Upload position data using writeBuffer
-    auto upload_cmd = device->createCommandList();
-    upload_cmd->open();
-    upload_cmd->writeBuffer(
+    commandlist->open();
+    commandlist->writeBuffer(
         position_buffer, positions.data(), point_count * sizeof(glm::vec3));
-    upload_cmd->close();
-    device->executeCommandList(upload_cmd);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
-
-    resource_allocator.destroy(upload_cmd);
 
     // Step 2: Create AABB buffer and compute AABBs using toAABB.slang (raw
     // buffer for acceleration structure)
@@ -529,15 +530,13 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setDebugName("radiusBuffer"));
 
     // Upload radius to constant buffer
-    auto radius_upload_cmd = device->createCommandList();
-    radius_upload_cmd->open();
+    commandlist->open();
     float radius_data[4] = { radius, 0, 0, 0 };  // Pad to 16 bytes
-    radius_upload_cmd->writeBuffer(
+    commandlist->writeBuffer(
         radius_buffer, radius_data, sizeof(radius_data));
-    radius_upload_cmd->close();
-    device->executeCommandList(radius_upload_cmd);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
-    resource_allocator.destroy(radius_upload_cmd);
 
     aabb_vars["SearchParams"] = radius_buffer;
     aabb_vars["positions"] = position_buffer;
@@ -571,13 +570,11 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     blas_desc.isTopLevel = false;
     auto BLAS = resource_allocator.create(blas_desc);
 
-    auto blas_build_cmd = device->createCommandList();
-    blas_build_cmd->open();
-    nvrhi::utils::BuildBottomLevelAccelStruct(blas_build_cmd, BLAS, blas_desc);
-    blas_build_cmd->close();
-    device->executeCommandList(blas_build_cmd);
+    commandlist->open();
+    nvrhi::utils::BuildBottomLevelAccelStruct(commandlist, BLAS, blas_desc);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
-    resource_allocator.destroy(blas_build_cmd);
 
     // Step 4: Build TLAS
     nvrhi::rt::AccelStructDesc tlas_desc;
@@ -598,14 +595,12 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
 
     auto TLAS = resource_allocator.create(tlas_desc);
 
-    auto build_commandlist = device->createCommandList();
-    build_commandlist->open();
-
-    build_commandlist->buildTopLevelAccelStruct(
+    commandlist->open();
+    commandlist->buildTopLevelAccelStruct(
         TLAS, std::vector{ instance_desc }.data(), 1);
-    build_commandlist->close();
-
-    device->executeCommandList(build_commandlist);
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
 
     // Step 5: Create output buffers for pairs
     // Maximum possible pairs (each point could pair with every other point)
@@ -630,12 +625,11 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setDebugName("pairsCountBuffer"));
 
     // Initialize counter to 0
-    auto init_commandlist = device->createCommandList();
-    init_commandlist->open();
+    commandlist->open();
     uint32_t zero = 0;
-    init_commandlist->writeBuffer(pairs_count_buffer, &zero, sizeof(uint32_t));
-    init_commandlist->close();
-    device->executeCommandList(init_commandlist);
+    commandlist->writeBuffer(pairs_count_buffer, &zero, sizeof(uint32_t));
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
 
     // Step 6: Run contact.slang ray tracing shader
@@ -647,13 +641,13 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     if (!contact_program || !contact_program->getBufferPointer()) {
         spdlog::error("contact_program is null or has no buffer!");
         resource_allocator.destroy(contact_program);
-        resource_allocator.destroy(init_commandlist);
         resource_allocator.destroy(pairs_count_buffer);
         resource_allocator.destroy(pairs_buffer);
         resource_allocator.destroy(TLAS);
         resource_allocator.destroy(BLAS);
         resource_allocator.destroy(aabb_buffer);
         resource_allocator.destroy(position_buffer);
+        resource_allocator.destroy(commandlist);
         out_pair_count = 0;
         return nullptr;
     }
@@ -664,13 +658,13 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             "contact shader compilation failed: {}",
             contact_program->get_error_string());
         resource_allocator.destroy(contact_program);
-        resource_allocator.destroy(init_commandlist);
         resource_allocator.destroy(pairs_count_buffer);
         resource_allocator.destroy(pairs_buffer);
         resource_allocator.destroy(TLAS);
         resource_allocator.destroy(BLAS);
         resource_allocator.destroy(aabb_buffer);
         resource_allocator.destroy(position_buffer);
+        resource_allocator.destroy(commandlist);
         out_pair_count = 0;
         return nullptr;
     }
@@ -686,17 +680,15 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setKeepInitialState(true)
             .setDebugName("contactRadiusBuffer"));
 
-    auto contact_radius_upload = device->createCommandList();
-    contact_radius_upload->open();
+    commandlist->open();
     float contact_radius_data[4] = { radius, 0, 0, 0 };  // Pad to 16 bytes
-    contact_radius_upload->writeBuffer(
+    commandlist->writeBuffer(
         contact_radius_buffer,
         contact_radius_data,
         sizeof(contact_radius_data));
-    contact_radius_upload->close();
-    device->executeCommandList(contact_radius_upload);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
-    resource_allocator.destroy(contact_radius_upload);
 
     contact_vars["SearchParams"] = contact_radius_buffer;
     contact_vars["SceneBVH"] = TLAS;
@@ -726,12 +718,11 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setKeepInitialState(true)
             .setDebugName("pairsCountReadbackBuffer"));
 
-    auto readback_commandlist = device->createCommandList();
-    readback_commandlist->open();
-    readback_commandlist->copyBuffer(
+    commandlist->open();
+    commandlist->copyBuffer(
         count_readback_buffer, 0, pairs_count_buffer, 0, sizeof(unsigned));
-    readback_commandlist->close();
-    device->executeCommandList(readback_commandlist);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
 
     void* count_data =
@@ -742,15 +733,13 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
     // Clean up temporary resources
     resource_allocator.destroy(position_buffer);
     resource_allocator.destroy(aabb_buffer);
-    resource_allocator.destroy(build_commandlist);
     resource_allocator.destroy(BLAS);
     resource_allocator.destroy(TLAS);
     resource_allocator.destroy(pairs_count_buffer);
-    resource_allocator.destroy(init_commandlist);
     resource_allocator.destroy(contact_program);
     resource_allocator.destroy(contact_radius_buffer);
-    resource_allocator.destroy(readback_commandlist);
     resource_allocator.destroy(count_readback_buffer);
+    resource_allocator.destroy(commandlist);
 
     return pairs_buffer;
 }
@@ -788,16 +777,16 @@ std::vector<PointPairs> FindNeighbors(
             .setDebugName("pairsReadbackBuffer"));
 
     // Create command list to copy data
-    auto copy_commandlist = device->createCommandList();
-    copy_commandlist->open();
-    copy_commandlist->copyBuffer(
+    auto commandlist = resource_allocator.create(CommandListDesc{});
+    commandlist->open();
+    commandlist->copyBuffer(
         readback_buffer,
         0,
         pairs_buffer,
         0,
         out_pair_count * sizeof(PointPairs));
-    copy_commandlist->close();
-    device->executeCommandList(copy_commandlist);
+    commandlist->close();
+    device->executeCommandList(commandlist);
     device->waitForIdle();
 
     // Map and read the results
@@ -809,7 +798,7 @@ std::vector<PointPairs> FindNeighbors(
     // Clean up resources
     resource_allocator.destroy(pairs_buffer);
     resource_allocator.destroy(readback_buffer);
-    resource_allocator.destroy(copy_commandlist);
+    resource_allocator.destroy(commandlist);
 
     return result;
 }
