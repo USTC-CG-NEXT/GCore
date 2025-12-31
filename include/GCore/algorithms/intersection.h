@@ -67,10 +67,19 @@ GEOMETRY_API std::vector<PointSample> IntersectInterweaved(
     const std::vector<glm::vec3>& next_point,
     const Geometry& BaseMesh);
 
+// Find neighbors from Geometry (convenience wrapper)
 GEOMETRY_API nvrhi::BufferHandle FindNeighborsToBuffer(
     const Geometry& point_cloud,
     float radius,
     unsigned& out_pair_count);
+
+// Find neighbors directly from GPU position buffer (for per-substep updates)
+GEOMETRY_API nvrhi::BufferHandle FindNeighborsFromPositionBuffer(
+    const nvrhi::BufferHandle& position_buffer,
+    size_t point_count,
+    float radius,
+    unsigned& out_pair_count);
+
 GEOMETRY_API std::vector<PointPairs> FindNeighbors(
     const Geometry& point_cloud,
     float radius,

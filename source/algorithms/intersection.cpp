@@ -424,6 +424,258 @@ std::vector<PointSample> IntersectInterweaved(
     return Intersect(rays, BaseMesh);
 }
 
+nvrhi::BufferHandle FindNeighborsFromPositionBuffer(
+    const nvrhi::BufferHandle& position_buffer,
+    size_t point_count,
+    float radius,
+    unsigned& out_pair_count)
+{
+    init_gpu_geometry_algorithms();
+    
+    if (!position_buffer || point_count == 0) {
+        out_pair_count = 0;
+        return nullptr;
+    }
+
+    auto& resource_allocator = get_resource_allocator();
+    auto device = RHI::get_device();
+
+    // Create single command list for all operations
+    auto commandlist = resource_allocator.create(CommandListDesc{});
+
+    // Step 1: Create AABB buffer and compute AABBs using toAABB.slang
+    auto aabb_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(point_count * 2 * sizeof(glm::vec3))
+            .setInitialState(nvrhi::ResourceStates::UnorderedAccess)
+            .setKeepInitialState(true)
+            .setCanHaveRawViews(true)
+            .setCanHaveUAVs(true)
+            .setIsAccelStructBuildInput(true)
+            .setDebugName("aabbBuffer"));
+
+    // Compile and run toAABB compute shader
+    ProgramDesc aabb_desc;
+    aabb_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/toAABB.slang")
+        .set_entry_name("main")
+        .set_shader_type(nvrhi::ShaderType::Compute);
+
+    auto aabb_program = resource_allocator.create(aabb_desc);
+
+    if (!aabb_program->get_error_string().empty()) {
+        spdlog::error(
+            "toAABB shader compilation failed: {}",
+            aabb_program->get_error_string());
+        resource_allocator.destroy(aabb_program);
+        resource_allocator.destroy(aabb_buffer);
+        resource_allocator.destroy(commandlist);
+        out_pair_count = 0;
+        return nullptr;
+    }
+
+    ProgramVars aabb_vars(resource_allocator, aabb_program);
+
+    // Create constant buffer for radius
+    auto radius_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(16)
+            .setIsConstantBuffer(true)
+            .setInitialState(nvrhi::ResourceStates::ConstantBuffer)
+            .setKeepInitialState(true)
+            .setDebugName("radiusBuffer"));
+
+    commandlist->open();
+    float radius_data[4] = { radius, 0, 0, 0 };
+    commandlist->writeBuffer(radius_buffer, radius_data, sizeof(radius_data));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    aabb_vars["SearchParams"] = radius_buffer;
+    aabb_vars["positions"] = position_buffer;
+    aabb_vars["AABBs"] = aabb_buffer;
+    aabb_vars.finish_setting_vars();
+
+    ComputeContext compute_context(resource_allocator, aabb_vars);
+    compute_context.finish_setting_pso();
+    compute_context.begin();
+    compute_context.dispatch({}, aabb_vars, point_count, 32);
+    compute_context.finish();
+
+    resource_allocator.destroy(aabb_program);
+    resource_allocator.destroy(radius_buffer);
+
+    // Step 2: Build BLAS with AABBs
+    nvrhi::rt::AccelStructDesc blas_desc;
+    nvrhi::rt::GeometryDesc geometry_desc;
+    geometry_desc.geometryType = nvrhi::rt::GeometryType::AABBs;
+    geometry_desc.flags = nvrhi::rt::GeometryFlags::NoDuplicateAnyHitInvocation;
+    nvrhi::rt::GeometryAABBs aabbs;
+    aabbs.setBuffer(aabb_buffer)
+        .setOffset(0)
+        .setCount(point_count)
+        .setStride(2 * sizeof(glm::vec3));
+    geometry_desc.setAABBs(aabbs);
+    blas_desc.addBottomLevelGeometry(geometry_desc);
+    blas_desc.isTopLevel = false;
+    auto BLAS = resource_allocator.create(blas_desc);
+
+    commandlist->open();
+    nvrhi::utils::BuildBottomLevelAccelStruct(commandlist, BLAS, blas_desc);
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    // Step 3: Build TLAS
+    nvrhi::rt::AccelStructDesc tlas_desc;
+    tlas_desc.isTopLevel = true;
+    tlas_desc.topLevelMaxInstances = 1;
+
+    nvrhi::rt::InstanceDesc instance_desc;
+    instance_desc.setBLAS(BLAS);
+    instance_desc.setInstanceID(0);
+    instance_desc.setInstanceMask(0xFF);
+
+    nvrhi::rt::AffineTransform affine_transform;
+    memset(affine_transform, 0, sizeof(nvrhi::rt::AffineTransform));
+    affine_transform[0] = 1.0f;
+    affine_transform[5] = 1.0f;
+    affine_transform[10] = 1.0f;
+    instance_desc.setTransform(affine_transform);
+
+    auto TLAS = resource_allocator.create(tlas_desc);
+
+    commandlist->open();
+    commandlist->buildTopLevelAccelStruct(
+        TLAS, std::vector{ instance_desc }.data(), 1);
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    // Step 4: Create output buffers for pairs
+    size_t max_pairs = point_count * 30;
+
+    auto pairs_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(max_pairs * sizeof(PointPairs))
+            .setStructStride(sizeof(PointPairs))
+            .setInitialState(nvrhi::ResourceStates::UnorderedAccess)
+            .setKeepInitialState(true)
+            .setCanHaveUAVs(true)
+            .setDebugName("pairsBuffer"));
+
+    auto pairs_count_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(sizeof(unsigned))
+            .setStructStride(sizeof(unsigned))
+            .setInitialState(nvrhi::ResourceStates::UnorderedAccess)
+            .setKeepInitialState(true)
+            .setCanHaveUAVs(true)
+            .setDebugName("pairsCountBuffer"));
+
+    commandlist->open();
+    uint32_t zero = 0;
+    commandlist->writeBuffer(pairs_count_buffer, &zero, sizeof(uint32_t));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    // Step 5: Run contact.slang ray tracing shader
+    ProgramDesc contact_desc;
+    contact_desc.shaderType = nvrhi::ShaderType::AllRayTracing;
+    contact_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/contact.slang");
+    auto contact_program = resource_allocator.create(contact_desc);
+
+    if (!contact_program || !contact_program->getBufferPointer() ||
+        !contact_program->get_error_string().empty()) {
+        if (!contact_program->get_error_string().empty()) {
+            spdlog::error(
+                "contact shader compilation failed: {}",
+                contact_program->get_error_string());
+        }
+        resource_allocator.destroy(contact_program);
+        resource_allocator.destroy(pairs_count_buffer);
+        resource_allocator.destroy(pairs_buffer);
+        resource_allocator.destroy(TLAS);
+        resource_allocator.destroy(BLAS);
+        resource_allocator.destroy(aabb_buffer);
+        resource_allocator.destroy(commandlist);
+        out_pair_count = 0;
+        return nullptr;
+    }
+
+    ProgramVars contact_vars(resource_allocator, contact_program);
+
+    auto contact_radius_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(16)
+            .setIsConstantBuffer(true)
+            .setInitialState(nvrhi::ResourceStates::ConstantBuffer)
+            .setKeepInitialState(true)
+            .setDebugName("contactRadiusBuffer"));
+
+    commandlist->open();
+    float contact_radius_data[4] = { radius, 0, 0, 0 };
+    commandlist->writeBuffer(
+        contact_radius_buffer,
+        contact_radius_data,
+        sizeof(contact_radius_data));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    contact_vars["SearchParams"] = contact_radius_buffer;
+    contact_vars["SceneBVH"] = TLAS;
+    contact_vars["positions"] = position_buffer;
+    contact_vars["Pairs"] = pairs_buffer;
+    contact_vars["PairsCount"] = pairs_count_buffer;
+    contact_vars.finish_setting_vars();
+
+    RaytracingContext raytracing_context(resource_allocator, contact_vars);
+    raytracing_context.announce_raygeneration("RayGen");
+    raytracing_context.announce_hitgroup(
+        "ClosestHit", "AnyHit", "Intersection");
+    raytracing_context.announce_miss("Miss");
+    raytracing_context.finish_announcing_shader_names();
+
+    raytracing_context.begin();
+    raytracing_context.trace_rays({}, contact_vars, point_count, 1, 1);
+    raytracing_context.finish();
+
+    // Step 6: Read back the pair count
+    auto count_readback_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(sizeof(unsigned))
+            .setCpuAccess(nvrhi::CpuAccessMode::Read)
+            .setInitialState(nvrhi::ResourceStates::CopyDest)
+            .setKeepInitialState(true)
+            .setDebugName("pairsCountReadbackBuffer"));
+
+    commandlist->open();
+    commandlist->copyBuffer(
+        count_readback_buffer, 0, pairs_count_buffer, 0, sizeof(unsigned));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    void* count_data =
+        device->mapBuffer(count_readback_buffer, nvrhi::CpuAccessMode::Read);
+    memcpy(&out_pair_count, count_data, sizeof(unsigned));
+    device->unmapBuffer(count_readback_buffer);
+
+    // Clean up temporary resources
+    resource_allocator.destroy(aabb_buffer);
+    resource_allocator.destroy(BLAS);
+    resource_allocator.destroy(TLAS);
+    resource_allocator.destroy(pairs_count_buffer);
+    resource_allocator.destroy(contact_program);
+    resource_allocator.destroy(contact_radius_buffer);
+    resource_allocator.destroy(count_readback_buffer);
+    resource_allocator.destroy(commandlist);
+
+    return pairs_buffer;
+}
+
 nvrhi::BufferHandle FindNeighborsToBuffer(
     const Geometry& point_cloud,
     float radius,
@@ -449,10 +701,7 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
 
     size_t point_count = positions.size();
 
-    // Create single command list for all operations
-    auto commandlist = resource_allocator.create(CommandListDesc{});
-
-    // Step 1: Create position buffer (structured buffer)
+    // Create position buffer from geometry
     auto position_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
             .setByteSize(point_count * sizeof(glm::vec3))
@@ -461,287 +710,23 @@ nvrhi::BufferHandle FindNeighborsToBuffer(
             .setKeepInitialState(true)
             .setDebugName("positionBuffer"));
 
-    // Upload position data using writeBuffer
+    auto commandlist = resource_allocator.create(CommandListDesc{});
     commandlist->open();
     commandlist->writeBuffer(
         position_buffer, positions.data(), point_count * sizeof(glm::vec3));
     commandlist->close();
     device->executeCommandList(commandlist);
     device->waitForIdle();
-
-    // Step 2: Create AABB buffer and compute AABBs using toAABB.slang (raw
-    // buffer for acceleration structure)
-    auto aabb_buffer = resource_allocator.create(
-        nvrhi::BufferDesc{}
-            .setByteSize(point_count * 2 * sizeof(glm::vec3))
-            .setInitialState(nvrhi::ResourceStates::UnorderedAccess)
-            .setKeepInitialState(true)
-            .setCanHaveRawViews(true)
-            .setCanHaveUAVs(true)
-            .setIsAccelStructBuildInput(true)
-            .setDebugName("aabbBuffer"));
-
-    // Compile and run toAABB compute shader
-    ProgramDesc aabb_desc;
-    aabb_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/toAABB.slang")
-        .set_entry_name("main")
-        .set_shader_type(nvrhi::ShaderType::Compute);
-
-    auto aabb_program = resource_allocator.create(aabb_desc);
-
-    // Check for shader compilation errors
-    if (!aabb_program->get_error_string().empty()) {
-        spdlog::error(
-            "toAABB shader compilation failed: {}",
-            aabb_program->get_error_string());
-        resource_allocator.destroy(aabb_program);
-        resource_allocator.destroy(aabb_buffer);
-        resource_allocator.destroy(position_buffer);
-        out_pair_count = 0;
-        return nullptr;
-    }
-
-    if (!aabb_program) {
-        spdlog::error("aabb_program is null!");
-        resource_allocator.destroy(aabb_buffer);
-        resource_allocator.destroy(position_buffer);
-        out_pair_count = 0;
-        return nullptr;
-    }
-
-    if (!aabb_program->getBufferPointer()) {
-        spdlog::error("aabb_program buffer pointer is null!");
-        resource_allocator.destroy(aabb_program);
-        resource_allocator.destroy(aabb_buffer);
-        resource_allocator.destroy(position_buffer);
-        out_pair_count = 0;
-        return nullptr;
-    }
-
-    ProgramVars aabb_vars(resource_allocator, aabb_program);
-
-    // Create constant buffer for radius
-    auto radius_buffer = resource_allocator.create(
-        nvrhi::BufferDesc{}
-            .setByteSize(16)  // Align to 16 bytes for D3D12
-            .setIsConstantBuffer(true)
-            .setInitialState(nvrhi::ResourceStates::ConstantBuffer)
-            .setKeepInitialState(true)
-            .setDebugName("radiusBuffer"));
-
-    // Upload radius to constant buffer
-    commandlist->open();
-    float radius_data[4] = { radius, 0, 0, 0 };  // Pad to 16 bytes
-    commandlist->writeBuffer(
-        radius_buffer, radius_data, sizeof(radius_data));
-    commandlist->close();
-    device->executeCommandList(commandlist);
-    device->waitForIdle();
-
-    aabb_vars["SearchParams"] = radius_buffer;
-    aabb_vars["positions"] = position_buffer;
-    aabb_vars["AABBs"] = aabb_buffer;
-
-    aabb_vars.finish_setting_vars();
-
-    // Use ComputeContext to simplify pipeline creation and dispatch
-    ComputeContext compute_context(resource_allocator, aabb_vars);
-    compute_context.finish_setting_pso();
-
-    compute_context.begin();
-    compute_context.dispatch({}, aabb_vars, point_count, 32);
-    compute_context.finish();
-
-    resource_allocator.destroy(aabb_program);
-    resource_allocator.destroy(radius_buffer);
-
-    // Step 3: Build BLAS with AABBs for procedural geometry
-    nvrhi::rt::AccelStructDesc blas_desc;
-    nvrhi::rt::GeometryDesc geometry_desc;
-    geometry_desc.geometryType = nvrhi::rt::GeometryType::AABBs;
-    geometry_desc.flags = nvrhi::rt::GeometryFlags::NoDuplicateAnyHitInvocation;
-    nvrhi::rt::GeometryAABBs aabbs;
-    aabbs.setBuffer(aabb_buffer)
-        .setOffset(0)
-        .setCount(point_count)
-        .setStride(2 * sizeof(glm::vec3));
-    geometry_desc.setAABBs(aabbs);
-    blas_desc.addBottomLevelGeometry(geometry_desc);
-    blas_desc.isTopLevel = false;
-    auto BLAS = resource_allocator.create(blas_desc);
-
-    commandlist->open();
-    nvrhi::utils::BuildBottomLevelAccelStruct(commandlist, BLAS, blas_desc);
-    commandlist->close();
-    device->executeCommandList(commandlist);
-    device->waitForIdle();
-
-    // Step 4: Build TLAS
-    nvrhi::rt::AccelStructDesc tlas_desc;
-    tlas_desc.isTopLevel = true;
-    tlas_desc.topLevelMaxInstances = 1;
-
-    nvrhi::rt::InstanceDesc instance_desc;
-    instance_desc.setBLAS(BLAS);
-    instance_desc.setInstanceID(0);
-    instance_desc.setInstanceMask(0xFF);
-
-    nvrhi::rt::AffineTransform affine_transform;
-    memset(affine_transform, 0, sizeof(nvrhi::rt::AffineTransform));
-    affine_transform[0] = 1.0f;   // [0][0]
-    affine_transform[5] = 1.0f;   // [1][1]
-    affine_transform[10] = 1.0f;  // [2][2]
-    instance_desc.setTransform(affine_transform);
-
-    auto TLAS = resource_allocator.create(tlas_desc);
-
-    commandlist->open();
-    commandlist->buildTopLevelAccelStruct(
-        TLAS, std::vector{ instance_desc }.data(), 1);
-    commandlist->close();
-    device->executeCommandList(commandlist);
-    device->waitForIdle();
-
-    // Step 5: Create output buffers for pairs
-    // Maximum possible pairs (each point could pair with every other point)
-    size_t max_pairs = point_count * 30;
-
-    auto pairs_buffer = resource_allocator.create(
-        nvrhi::BufferDesc{}
-            .setByteSize(max_pairs * sizeof(PointPairs))
-            .setStructStride(sizeof(PointPairs))
-            .setInitialState(nvrhi::ResourceStates::UnorderedAccess)
-            .setKeepInitialState(true)
-            .setCanHaveUAVs(true)
-            .setDebugName("pairsBuffer"));
-
-    auto pairs_count_buffer = resource_allocator.create(
-        nvrhi::BufferDesc{}
-            .setByteSize(sizeof(unsigned))
-            .setStructStride(sizeof(unsigned))
-            .setInitialState(nvrhi::ResourceStates::UnorderedAccess)
-            .setKeepInitialState(true)
-            .setCanHaveUAVs(true)
-            .setDebugName("pairsCountBuffer"));
-
-    // Initialize counter to 0
-    commandlist->open();
-    uint32_t zero = 0;
-    commandlist->writeBuffer(pairs_count_buffer, &zero, sizeof(uint32_t));
-    commandlist->close();
-    device->executeCommandList(commandlist);
-    device->waitForIdle();
-
-    // Step 6: Run contact.slang ray tracing shader
-    ProgramDesc contact_desc;
-    contact_desc.shaderType = nvrhi::ShaderType::AllRayTracing;
-    contact_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/contact.slang");
-    auto contact_program = resource_allocator.create(contact_desc);
-
-    if (!contact_program || !contact_program->getBufferPointer()) {
-        spdlog::error("contact_program is null or has no buffer!");
-        resource_allocator.destroy(contact_program);
-        resource_allocator.destroy(pairs_count_buffer);
-        resource_allocator.destroy(pairs_buffer);
-        resource_allocator.destroy(TLAS);
-        resource_allocator.destroy(BLAS);
-        resource_allocator.destroy(aabb_buffer);
-        resource_allocator.destroy(position_buffer);
-        resource_allocator.destroy(commandlist);
-        out_pair_count = 0;
-        return nullptr;
-    }
-
-    // Check for shader compilation errors
-    if (!contact_program->get_error_string().empty()) {
-        spdlog::error(
-            "contact shader compilation failed: {}",
-            contact_program->get_error_string());
-        resource_allocator.destroy(contact_program);
-        resource_allocator.destroy(pairs_count_buffer);
-        resource_allocator.destroy(pairs_buffer);
-        resource_allocator.destroy(TLAS);
-        resource_allocator.destroy(BLAS);
-        resource_allocator.destroy(aabb_buffer);
-        resource_allocator.destroy(position_buffer);
-        resource_allocator.destroy(commandlist);
-        out_pair_count = 0;
-        return nullptr;
-    }
-
-    ProgramVars contact_vars(resource_allocator, contact_program);
-
-    // Create constant buffer for contact shader
-    auto contact_radius_buffer = resource_allocator.create(
-        nvrhi::BufferDesc{}
-            .setByteSize(16)
-            .setIsConstantBuffer(true)
-            .setInitialState(nvrhi::ResourceStates::ConstantBuffer)
-            .setKeepInitialState(true)
-            .setDebugName("contactRadiusBuffer"));
-
-    commandlist->open();
-    float contact_radius_data[4] = { radius, 0, 0, 0 };  // Pad to 16 bytes
-    commandlist->writeBuffer(
-        contact_radius_buffer,
-        contact_radius_data,
-        sizeof(contact_radius_data));
-    commandlist->close();
-    device->executeCommandList(commandlist);
-    device->waitForIdle();
-
-    contact_vars["SearchParams"] = contact_radius_buffer;
-    contact_vars["SceneBVH"] = TLAS;
-    contact_vars["positions"] = position_buffer;
-    contact_vars["Pairs"] = pairs_buffer;
-    contact_vars["PairsCount"] = pairs_count_buffer;
-
-    contact_vars.finish_setting_vars();
-
-    RaytracingContext raytracing_context(resource_allocator, contact_vars);
-    raytracing_context.announce_raygeneration("RayGen");
-    raytracing_context.announce_hitgroup(
-        "ClosestHit", "AnyHit", "Intersection");
-    raytracing_context.announce_miss("Miss");
-    raytracing_context.finish_announcing_shader_names();
-
-    raytracing_context.begin();
-    raytracing_context.trace_rays({}, contact_vars, point_count, 1, 1);
-    raytracing_context.finish();
-
-    // Step 7: Read back the pair count
-    auto count_readback_buffer = resource_allocator.create(
-        nvrhi::BufferDesc{}
-            .setByteSize(sizeof(unsigned))
-            .setCpuAccess(nvrhi::CpuAccessMode::Read)
-            .setInitialState(nvrhi::ResourceStates::CopyDest)
-            .setKeepInitialState(true)
-            .setDebugName("pairsCountReadbackBuffer"));
-
-    commandlist->open();
-    commandlist->copyBuffer(
-        count_readback_buffer, 0, pairs_count_buffer, 0, sizeof(unsigned));
-    commandlist->close();
-    device->executeCommandList(commandlist);
-    device->waitForIdle();
-
-    void* count_data =
-        device->mapBuffer(count_readback_buffer, nvrhi::CpuAccessMode::Read);
-    memcpy(&out_pair_count, count_data, sizeof(unsigned));
-    device->unmapBuffer(count_readback_buffer);
-
-    // Clean up temporary resources
-    resource_allocator.destroy(position_buffer);
-    resource_allocator.destroy(aabb_buffer);
-    resource_allocator.destroy(BLAS);
-    resource_allocator.destroy(TLAS);
-    resource_allocator.destroy(pairs_count_buffer);
-    resource_allocator.destroy(contact_program);
-    resource_allocator.destroy(contact_radius_buffer);
-    resource_allocator.destroy(count_readback_buffer);
     resource_allocator.destroy(commandlist);
 
-    return pairs_buffer;
+    // Call the core function with the position buffer
+    auto result = FindNeighborsFromPositionBuffer(
+        position_buffer, point_count, radius, out_pair_count);
+
+    // Clean up the position buffer we created
+    resource_allocator.destroy(position_buffer);
+
+    return result;
 }
 
 std::vector<PointPairs> FindNeighbors(
