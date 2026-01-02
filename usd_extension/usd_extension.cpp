@@ -124,8 +124,12 @@ bool write_geometry_to_usd(
                     pxr::UsdGeomTokens->none);
             }
             else {
-                usdgeom.CreateNormalsAttr().Block();
+                auto normals_attr = usdgeom.GetNormalsAttr();
+                if (normals_attr) {
+                    normals_attr.Block();
+                }
             }
+            
             if (!mesh_usdview.get_display_colors().empty()) {
                 auto colorPrimvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken("displayColor"),
@@ -133,6 +137,13 @@ bool write_geometry_to_usd(
                 colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
                 colorPrimvar.Set(mesh_usdview.get_display_colors(), time);
             }
+            else {
+                auto colorPrimvar = primVarAPI.GetPrimvar(pxr::TfToken("displayColor"));
+                if (colorPrimvar) {
+                    colorPrimvar.GetAttr().Block();
+                }
+            }
+            
             if (!mesh_usdview.get_uv_coordinates().empty()) {
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken("UVMap"),
@@ -144,6 +155,12 @@ bool write_geometry_to_usd(
                 }
                 else {
                     primvar.SetInterpolation(pxr::UsdGeomTokens->faceVarying);
+                }
+            }
+            else {
+                auto uvPrimvar = primVarAPI.GetPrimvar(pxr::TfToken("UVMap"));
+                if (uvPrimvar) {
+                    uvPrimvar.GetAttr().Block();
                 }
             }
 
