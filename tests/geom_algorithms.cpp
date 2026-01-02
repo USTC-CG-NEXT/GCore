@@ -12,7 +12,7 @@
 #include "RHI/rhi.hpp"
 #include "glm/ext/matrix_transform.hpp"
 
-using namespace USTC_CG;
+using namespace Ruzino;
 
 class IntersectionTests : public ::testing::Test {
    protected:

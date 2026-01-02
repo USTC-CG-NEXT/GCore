@@ -16,7 +16,7 @@
 #include "glm/gtc/type_ptr.hpp"
 #include "nvrhi/nvrhi.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 ResourceAllocator resource_allocator_;
 std::shared_ptr<ShaderFactory> shader_factory;
 
@@ -788,5 +788,5 @@ std::vector<PointPairs> FindNeighbors(
     return result;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE
 #endif

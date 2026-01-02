@@ -13,7 +13,7 @@
 #include "GCore/Components/VolumeComponent.h"
 #endif
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 Geometry::Geometry()
     : components_(std::make_shared<std::vector<GeometryComponentHandle>>())
 {
@@ -157,4 +157,4 @@ void Geometry::detach_shared_components()
     }
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

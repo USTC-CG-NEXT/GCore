@@ -10,14 +10,14 @@ else()
 set(SKIP_LIST usd_extension)
 endif()
 
-USTC_CG_ADD_LIB(
+RUZINO_ADD_LIB(
 	geometry 
 	SHARED
 	PUBLIC_LIBS OpenMeshCore spdlog::spdlog igl_core triangle::triangle glm::glm OpenVolumeMesh
 	PYTHON_WRAP_DIR python
 	COMPILE_DEFS
 		NOMINMAX 
-		USTC_CG_BACKEND_NVRHI
+		RUZINO_BACKEND_NVRHI
 	SKIP_DIRS
 	    external ${SKIP_LIST}
 )

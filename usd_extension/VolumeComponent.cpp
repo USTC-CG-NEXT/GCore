@@ -1,7 +1,7 @@
 
 #include "GCore/Components/VolumeComponent.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 GeometryComponentHandle VolumeComponent::copy(Geometry* operand) const
 {
     auto new_component = std::make_shared<VolumeComponent>(operand);
@@ -39,4 +39,4 @@ openvdb::GridBase::Ptr VolumeComponent::get_grid()
     return grid;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

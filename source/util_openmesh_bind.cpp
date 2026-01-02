@@ -2,7 +2,7 @@
 
 #include "GCore/Components/MeshComponent.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 std::shared_ptr<PolyMesh> operand_to_openmesh(Geometry* mesh_oeprand)
 {
     auto openmesh = std::make_shared<PolyMesh>();
@@ -579,4 +579,4 @@ std::shared_ptr<VolumeMesh> openmesh_to_volumemesh(PolyMesh* openmesh)
     return volumemesh;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

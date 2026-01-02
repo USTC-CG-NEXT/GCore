@@ -4,7 +4,7 @@
 #include "pxr/base/vt/array.h"
 #include "glm/gtc/quaternion.hpp"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 class GEOMETRY_API InstancerComponent final : public GeometryComponent {
    public:
@@ -62,4 +62,4 @@ class GEOMETRY_API InstancerComponent final : public GeometryComponent {
     std::vector<glm::vec3> scales_;
 };
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

@@ -7,7 +7,7 @@
 
 #include "GCore/GOP.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 std::string SkelComponent::to_string() const
 {
     std::ostringstream out;
@@ -32,4 +32,4 @@ GeometryComponentHandle SkelComponent::copy(Geometry* operand) const
     return ret;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

@@ -6,7 +6,7 @@
 
 #include "GCore/api.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 #define USE_USD_SCRATCH_BUFFER 0
 
@@ -123,4 +123,4 @@ std::shared_ptr<const OperandType> Geometry::get_const_component(size_t idx)
     return const_cast<const Geometry*>(this)->get_component<OperandType>(idx);
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

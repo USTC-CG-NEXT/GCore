@@ -5,7 +5,7 @@
 #include "GCore/Components.h"
 #include "GCore/GOP.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 struct GEOMETRY_API PointsComponent : public GeometryComponent {
     explicit PointsComponent(Geometry* attached_operand);
 
@@ -76,4 +76,4 @@ struct GEOMETRY_API PointsComponent : public GeometryComponent {
     std::vector<float> width;
 };
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

@@ -4,7 +4,7 @@
 #include "GOP.h"
 #include "glm/glm.hpp"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 struct GEOMETRY_API GeometryComponent {
     virtual ~GeometryComponent();
 
@@ -26,4 +26,4 @@ struct GEOMETRY_API GeometryComponent {
     friend class Geometry;
 };
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

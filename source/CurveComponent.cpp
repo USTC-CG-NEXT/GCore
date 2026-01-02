@@ -3,7 +3,7 @@
 #include <sstream>
 
 #include "global_stage.hpp"
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 std::string CurveComponent::to_string() const
 {
     std::ostringstream out;
@@ -43,4 +43,4 @@ CurveComponent::CurveComponent(Geometry* attached_operand)
 #endif
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

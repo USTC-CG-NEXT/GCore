@@ -19,7 +19,7 @@
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/gtx/matrix_decompose.hpp"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 // Utility functions for ConstMeshUSDView
 static pxr::VtArray<pxr::GfVec3f> vec3f_array_to_vt_array(
@@ -447,4 +447,4 @@ bool write_geometry_to_usd(
     return true;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

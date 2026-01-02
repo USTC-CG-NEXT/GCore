@@ -3,7 +3,7 @@
 #include "GCore/Components/MeshViews.h"
 #include "GCore/GOP.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 MeshComponent::MeshComponent(Geometry* attached_operand)
     : GeometryComponent(attached_operand)
 {
@@ -115,4 +115,4 @@ void MeshComponent::append_mesh(const std::shared_ptr<MeshComponent>& mesh)
     set_face_vertex_counts(this_vertex_counts);
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

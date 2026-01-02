@@ -2,7 +2,7 @@
 
 #include <filesystem>
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 pxr::UsdShadeMaterial MaterialComponent::define_material(
     pxr::UsdStageRefPtr stage,
     pxr::SdfPath path) const
@@ -78,4 +78,4 @@ pxr::SdfPath MaterialComponent::get_material_path() const
     return material_path;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

@@ -2,7 +2,7 @@
 #include "GCore/GOP.h"
 #include "GCore/Components/MeshComponent.h"
 
-using namespace USTC_CG;
+using namespace Ruzino;
 
 TEST(GeometryCOW, ShallowCopyOnAssignment)
 {

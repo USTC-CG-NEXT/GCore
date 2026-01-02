@@ -4,7 +4,7 @@
 #include "GCore/api.h"
 
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 // Stores the chain of transformation
 
 class GEOMETRY_API XformComponent : public GeometryComponent {
@@ -47,4 +47,4 @@ class GEOMETRY_API XformComponent : public GeometryComponent {
     std::vector<glm::vec3> rotation;
 };
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

@@ -7,7 +7,7 @@
 
 #include "GCore/GOP.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 using PolyMesh = OpenMesh::PolyMesh_ArrayKernelT<>;
 using VolumeMesh = OpenVolumeMesh::GeometricTetrahedralMeshV3d;
 
@@ -29,4 +29,4 @@ GEOMETRY_API std::shared_ptr<Geometry> openvolulemesh_to_operand(
 GEOMETRY_API std::shared_ptr<VolumeMesh> openmesh_to_volumemesh(
     PolyMesh* openmesh);
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

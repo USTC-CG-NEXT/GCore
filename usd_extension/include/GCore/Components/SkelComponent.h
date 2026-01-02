@@ -6,7 +6,7 @@
 #include "GCore/Components.h"
 #include "GCore/GOP.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 struct GEOMETRY_API SkelComponent : public GeometryComponent {
     explicit SkelComponent(Geometry* attached_operand)
         : GeometryComponent(attached_operand)
@@ -40,4 +40,4 @@ struct GEOMETRY_API SkelComponent : public GeometryComponent {
     GeometryComponentHandle copy(Geometry* operand) const override;
 };
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

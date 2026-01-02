@@ -15,7 +15,7 @@ struct ray {
 #include "RHI/ResourceManager/resource_allocator.hpp"
 #endif
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 struct MeshDesc;
 
 struct GEOMETRY_API PointSample {
@@ -87,4 +87,4 @@ GEOMETRY_API std::vector<PointPairs> FindNeighbors(
 
 #endif
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

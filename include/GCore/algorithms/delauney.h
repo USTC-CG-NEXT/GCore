@@ -2,7 +2,7 @@
 
 #include "GCore/GOP.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 namespace geom_algorithm {
 
@@ -16,4 +16,4 @@ delaunay(const Geometry& geometry, float maximum_radius = 0.0f);
 
 }  // namespace geom_algorithm
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

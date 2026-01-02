@@ -2,7 +2,7 @@
 
 #include "GCore/Components/MeshComponent.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 // ConstMeshIGLView Implementation
 ConstMeshIGLView::ConstMeshIGLView(const MeshComponent& mesh) : mesh_(mesh)
@@ -606,4 +606,4 @@ ConstMeshUSDView MeshComponent::get_usd_view() const
 
 #endif
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

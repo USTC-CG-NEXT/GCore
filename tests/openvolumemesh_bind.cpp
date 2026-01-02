@@ -5,7 +5,7 @@
 #include "GCore/Components/MeshComponent.h"
 #include "GCore/util_openmesh_bind.h"
 
-using namespace USTC_CG;
+using namespace Ruzino;
 
 class OpenVolumeMeshBindTest : public ::testing::Test {
    protected:

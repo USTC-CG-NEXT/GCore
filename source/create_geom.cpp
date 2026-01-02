@@ -9,7 +9,7 @@
 #include "GCore/Components/PointsComponent.h"
 #include "glm/geometric.hpp"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 Geometry create_grid(int resolution, float size)
 {
@@ -977,4 +977,4 @@ Geometry create_box_grid(
     return geometry;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

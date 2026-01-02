@@ -6,7 +6,7 @@
 #include "GCore/Components.h"
 #include "GCore/GOP.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 struct GEOMETRY_API MaterialComponent : public GeometryComponent {
     explicit MaterialComponent(Geometry* attached_operand)
         : GeometryComponent(attached_operand)
@@ -56,4 +56,4 @@ struct GEOMETRY_API MaterialComponent : public GeometryComponent {
     pxr::SdfPath mtlx_material_path;
 };
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

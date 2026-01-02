@@ -18,7 +18,7 @@
 #include <pxr/base/vt/array.h>
 #endif
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 struct MeshComponent;
 
 struct GEOMETRY_API ConstMeshIGLView {
@@ -270,4 +270,4 @@ struct GEOMETRY_API MeshUSDView : public ConstMeshUSDView {
 };
 #endif
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

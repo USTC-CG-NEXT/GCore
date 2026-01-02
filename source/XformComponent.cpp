@@ -2,7 +2,7 @@
 
 #include "glm/ext/matrix_transform.hpp"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 GeometryComponentHandle XformComponent::copy(Geometry* operand) const
 {
     auto ret = std::make_shared<XformComponent>(attached_operand);
@@ -47,4 +47,4 @@ glm::mat4 XformComponent::get_transform() const
     return final_transform;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

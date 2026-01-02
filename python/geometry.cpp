@@ -19,7 +19,7 @@
 #include <entt/meta/meta.hpp>
 
 namespace nb = nanobind;
-using namespace USTC_CG;
+using namespace Ruzino;
 
 // Helper function to convert Python list to glm::vec3
 glm::vec3 to_vec3(const nb::tuple& t) {

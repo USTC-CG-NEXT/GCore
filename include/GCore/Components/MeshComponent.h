@@ -7,7 +7,7 @@
 #include "GCore/GOP.h"
 #include "MeshViews.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 struct GEOMETRY_API MeshComponent : public GeometryComponent {
     explicit MeshComponent(Geometry* attached_operand);
@@ -420,4 +420,4 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
     // std::vector<std::vector<pxr::GfVec2i>> misc_quantities_edges;
 };
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

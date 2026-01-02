@@ -8,7 +8,7 @@
 
 #include "GCore/Components/MeshComponent.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 namespace geom_algorithm {
 Geometry delaunay(const Geometry& geometry, float maximum_radius)
@@ -162,4 +162,4 @@ Geometry delaunay(const Geometry& geometry, float maximum_radius)
     return ret;
 }
 }  // namespace geom_algorithm
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

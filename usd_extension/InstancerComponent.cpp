@@ -4,7 +4,7 @@
 #include "pxr/base/vt/array.h"
 
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 InstancerComponent::InstancerComponent(Geometry* attached_operand)
     : GeometryComponent(attached_operand)
 {
@@ -106,4 +106,4 @@ pxr::VtArray<int> InstancerComponent::get_proto_indices() const
     return pxr::VtArray<int>(positions_.size(), 0);
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

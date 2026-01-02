@@ -3,7 +3,7 @@
 #include "GCore/api.h"
 #include "GOP.h"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 
 Geometry GEOMETRY_API create_grid(int resolution, float size);
 Geometry GEOMETRY_API create_circle(int resolution, float radius);
@@ -45,4 +45,4 @@ Geometry GEOMETRY_API create_box_grid(
     float depth,
     bool add_diagonal);
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

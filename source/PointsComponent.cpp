@@ -6,7 +6,7 @@
 #include "GCore/GOP.h"
 #include "global_stage.hpp"
 
-USTC_CG_NAMESPACE_OPEN_SCOPE
+RUZINO_NAMESPACE_OPEN_SCOPE
 PointsComponent::PointsComponent(Geometry* attached_operand)
     : GeometryComponent(attached_operand)
 {
@@ -58,4 +58,4 @@ GeometryComponentHandle PointsComponent::copy(Geometry* operand) const
     return ret;
 }
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

@@ -5,7 +5,7 @@
 
 #include <pxr/usd/usd/stage.h>
 
-USTC_CG_NAMESPACE_OPEN_SCOPE class Stage;
+RUZINO_NAMESPACE_OPEN_SCOPE class Stage;
 
 void GEOMETRY_API init(Stage* stage);
 
@@ -15,4 +15,4 @@ bool GEOMETRY_API write_geometry_to_usd(
     const pxr::SdfPath& sdf_path,
     pxr::UsdTimeCode time);
 
-USTC_CG_NAMESPACE_CLOSE_SCOPE
+RUZINO_NAMESPACE_CLOSE_SCOPE

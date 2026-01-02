@@ -9,7 +9,7 @@
 #include "GCore/Components/XformComponent.h"
 #include "GCore/GOP.h"
 
-using namespace USTC_CG;
+using namespace Ruzino;
 
 class GeometryHashTest : public ::testing::Test {
    protected:
