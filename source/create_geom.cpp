@@ -778,7 +778,6 @@ Geometry create_box_grid(
     geometry.attach_component(mesh);
 
     std::vector<glm::vec3> points;
-    std::vector<glm::vec3> normals;
     std::vector<glm::vec2> texcoord;
     std::vector<int> faceVertexIndices;
     std::vector<int> faceVertexCounts;
@@ -791,30 +790,49 @@ Geometry create_box_grid(
     float halfHeight = height * 0.5f;
     float halfDepth = depth * 0.5f;
 
-    // Helper lambda to add a vertex
-    auto addVertex = [&](const glm::vec3& pos,
-                         const glm::vec3& normal,
-                         const glm::vec2& uv) {
-        points.push_back(pos);
-        normals.push_back(normal);
-        texcoord.push_back(uv);
+    // Create 3D grid of vertices filling the entire volume
+    int nx = resolution_x + 1;
+    int ny = resolution_y + 1;
+    int nz = resolution_z + 1;
+    
+    // Generate all vertices in 3D grid
+    std::vector<int> vertexGrid(nx * ny * nz);
+    int vertexIndex = 0;
+    
+    for (int iz = 0; iz < nz; ++iz) {
+        float z = -halfDepth + (depth * iz) / resolution_z;
+        for (int iy = 0; iy < ny; ++iy) {
+            float y = -halfHeight + (height * iy) / resolution_y;
+            for (int ix = 0; ix < nx; ++ix) {
+                float x = -halfWidth + (width * ix) / resolution_x;
+                
+                points.push_back(glm::vec3(x, y, z));
+                texcoord.push_back(glm::vec2(0.0f, 0.0f)); // Will be updated per face
+                
+                vertexGrid[iz * ny * nx + iy * nx + ix] = vertexIndex++;
+            }
+        }
+    }
+    
+    // Helper to get vertex index from 3D grid position
+    auto getVertexIndex = [&](int ix, int iy, int iz) -> int {
+        return vertexGrid[iz * ny * nx + iy * nx + ix];
     };
-
-    // Helper lambda to add a quad or two triangles
-    auto addQuad = [&](int v0, int v1, int v2, int v3, bool diagonal) {
-        if (diagonal) {
+    
+    // Helper to add a quad face
+    auto addQuadFace = [&](int v0, int v1, int v2, int v3, const glm::vec3& normal) {
+        if (add_diagonal) {
             // Split into two triangles
             faceVertexCounts.push_back(3);
             faceVertexIndices.push_back(v0);
             faceVertexIndices.push_back(v1);
             faceVertexIndices.push_back(v2);
-
+            
             faceVertexCounts.push_back(3);
             faceVertexIndices.push_back(v0);
             faceVertexIndices.push_back(v2);
             faceVertexIndices.push_back(v3);
-        }
-        else {
+        } else {
             // Keep as quad
             faceVertexCounts.push_back(4);
             faceVertexIndices.push_back(v0);
@@ -823,153 +841,44 @@ Geometry create_box_grid(
             faceVertexIndices.push_back(v3);
         }
     };
-
-    // Front face (Z = +halfDepth)
-    int frontStart = points.size();
-    for (int iy = 0; iy <= resolution_y; ++iy) {
-        float y = -halfHeight + (height * iy) / resolution_y;
-        float v = static_cast<float>(iy) / resolution_y;
-        for (int ix = 0; ix <= resolution_x; ++ix) {
-            float x = -halfWidth + (width * ix) / resolution_x;
-            float u = static_cast<float>(ix) / resolution_x;
-            addVertex(
-                glm::vec3(x, y, halfDepth),
-                glm::vec3(0, 0, 1),
-                glm::vec2(u, v));
-        }
-    }
-    for (int iy = 0; iy < resolution_y; ++iy) {
-        for (int ix = 0; ix < resolution_x; ++ix) {
-            int v0 = frontStart + iy * (resolution_x + 1) + ix;
-            int v1 = v0 + 1;
-            int v2 = v0 + (resolution_x + 1) + 1;
-            int v3 = v0 + (resolution_x + 1);
-            addQuad(v0, v1, v2, v3, add_diagonal);
-        }
-    }
-
-    // Back face (Z = -halfDepth)
-    int backStart = points.size();
-    for (int iy = 0; iy <= resolution_y; ++iy) {
-        float y = -halfHeight + (height * iy) / resolution_y;
-        float v = static_cast<float>(iy) / resolution_y;
-        for (int ix = 0; ix <= resolution_x; ++ix) {
-            float x = -halfWidth + (width * ix) / resolution_x;
-            float u = static_cast<float>(ix) / resolution_x;
-            addVertex(
-                glm::vec3(x, y, -halfDepth),
-                glm::vec3(0, 0, -1),
-                glm::vec2(1.0f - u, v));
-        }
-    }
-    for (int iy = 0; iy < resolution_y; ++iy) {
-        for (int ix = 0; ix < resolution_x; ++ix) {
-            int v0 = backStart + iy * (resolution_x + 1) + ix;
-            int v1 = v0 + 1;
-            int v2 = v0 + (resolution_x + 1) + 1;
-            int v3 = v0 + (resolution_x + 1);
-            addQuad(v0, v3, v2, v1, add_diagonal);
-        }
-    }
-
-    // Right face (X = +halfWidth)
-    int rightStart = points.size();
-    for (int iy = 0; iy <= resolution_y; ++iy) {
-        float y = -halfHeight + (height * iy) / resolution_y;
-        float v = static_cast<float>(iy) / resolution_y;
-        for (int iz = 0; iz <= resolution_z; ++iz) {
-            float z = -halfDepth + (depth * iz) / resolution_z;
-            float u = static_cast<float>(iz) / resolution_z;
-            addVertex(
-                glm::vec3(halfWidth, y, z),
-                glm::vec3(1, 0, 0),
-                glm::vec2(u, v));
-        }
-    }
-    for (int iy = 0; iy < resolution_y; ++iy) {
-        for (int iz = 0; iz < resolution_z; ++iz) {
-            int v0 = rightStart + iy * (resolution_z + 1) + iz;
-            int v1 = v0 + 1;
-            int v2 = v0 + (resolution_z + 1) + 1;
-            int v3 = v0 + (resolution_z + 1);
-            addQuad(v0, v1, v2, v3, add_diagonal);
-        }
-    }
-
-    // Left face (X = -halfWidth)
-    int leftStart = points.size();
-    for (int iy = 0; iy <= resolution_y; ++iy) {
-        float y = -halfHeight + (height * iy) / resolution_y;
-        float v = static_cast<float>(iy) / resolution_y;
-        for (int iz = 0; iz <= resolution_z; ++iz) {
-            float z = -halfDepth + (depth * iz) / resolution_z;
-            float u = static_cast<float>(iz) / resolution_z;
-            addVertex(
-                glm::vec3(-halfWidth, y, z),
-                glm::vec3(-1, 0, 0),
-                glm::vec2(1.0f - u, v));
-        }
-    }
-    for (int iy = 0; iy < resolution_y; ++iy) {
-        for (int iz = 0; iz < resolution_z; ++iz) {
-            int v0 = leftStart + iy * (resolution_z + 1) + iz;
-            int v1 = v0 + 1;
-            int v2 = v0 + (resolution_z + 1) + 1;
-            int v3 = v0 + (resolution_z + 1);
-            addQuad(v0, v3, v2, v1, add_diagonal);
-        }
-    }
-
-    // Top face (Y = +halfHeight)
-    int topStart = points.size();
-    for (int iz = 0; iz <= resolution_z; ++iz) {
-        float z = -halfDepth + (depth * iz) / resolution_z;
-        float v = static_cast<float>(iz) / resolution_z;
-        for (int ix = 0; ix <= resolution_x; ++ix) {
-            float x = -halfWidth + (width * ix) / resolution_x;
-            float u = static_cast<float>(ix) / resolution_x;
-            addVertex(
-                glm::vec3(x, halfHeight, z),
-                glm::vec3(0, 1, 0),
-                glm::vec2(u, v));
-        }
-    }
+    
+    // Generate hexahedral cells (cubes) filling the volume
     for (int iz = 0; iz < resolution_z; ++iz) {
-        for (int ix = 0; ix < resolution_x; ++ix) {
-            int v0 = topStart + iz * (resolution_x + 1) + ix;
-            int v1 = v0 + 1;
-            int v2 = v0 + (resolution_x + 1) + 1;
-            int v3 = v0 + (resolution_x + 1);
-            addQuad(v0, v1, v2, v3, add_diagonal);
-        }
-    }
-
-    // Bottom face (Y = -halfHeight)
-    int bottomStart = points.size();
-    for (int iz = 0; iz <= resolution_z; ++iz) {
-        float z = -halfDepth + (depth * iz) / resolution_z;
-        float v = static_cast<float>(iz) / resolution_z;
-        for (int ix = 0; ix <= resolution_x; ++ix) {
-            float x = -halfWidth + (width * ix) / resolution_x;
-            float u = static_cast<float>(ix) / resolution_x;
-            addVertex(
-                glm::vec3(x, -halfHeight, z),
-                glm::vec3(0, -1, 0),
-                glm::vec2(u, 1.0f - v));
-        }
-    }
-    for (int iz = 0; iz < resolution_z; ++iz) {
-        for (int ix = 0; ix < resolution_x; ++ix) {
-            int v0 = bottomStart + iz * (resolution_x + 1) + ix;
-            int v1 = v0 + 1;
-            int v2 = v0 + (resolution_x + 1) + 1;
-            int v3 = v0 + (resolution_x + 1);
-            addQuad(v0, v3, v2, v1, add_diagonal);
+        for (int iy = 0; iy < resolution_y; ++iy) {
+            for (int ix = 0; ix < resolution_x; ++ix) {
+                // Get the 8 vertices of this hexahedron
+                int v000 = getVertexIndex(ix,     iy,     iz);
+                int v100 = getVertexIndex(ix + 1, iy,     iz);
+                int v110 = getVertexIndex(ix + 1, iy + 1, iz);
+                int v010 = getVertexIndex(ix,     iy + 1, iz);
+                int v001 = getVertexIndex(ix,     iy,     iz + 1);
+                int v101 = getVertexIndex(ix + 1, iy,     iz + 1);
+                int v111 = getVertexIndex(ix + 1, iy + 1, iz + 1);
+                int v011 = getVertexIndex(ix,     iy + 1, iz + 1);
+                
+                // Add all 6 faces of the hexahedron
+                // Front face (Z-)
+                addQuadFace(v000, v010, v110, v100, glm::vec3(0, 0, -1));
+                
+                // Back face (Z+)
+                addQuadFace(v101, v111, v011, v001, glm::vec3(0, 0, 1));
+                
+                // Right face (X+)
+                addQuadFace(v100, v110, v111, v101, glm::vec3(1, 0, 0));
+                
+                // Left face (X-)
+                addQuadFace(v001, v011, v010, v000, glm::vec3(-1, 0, 0));
+                
+                // Top face (Y+)
+                addQuadFace(v010, v011, v111, v110, glm::vec3(0, 1, 0));
+                
+                // Bottom face (Y-)
+                addQuadFace(v001, v000, v100, v101, glm::vec3(0, -1, 0));
+            }
         }
     }
 
     mesh->set_vertices(points);
-    mesh->set_normals(normals);
     mesh->set_face_vertex_indices(faceVertexIndices);
     mesh->set_face_vertex_counts(faceVertexCounts);
     mesh->set_texcoords_array(texcoord);
