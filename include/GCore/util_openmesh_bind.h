@@ -20,7 +20,7 @@ GEOMETRY_API std::shared_ptr<Geometry> openmesh_to_operand(PolyMesh* openmesh);
 // Volume mesh binding - simplified to only support tetrahedral meshes
 // Reconstructs tetrahedra from triangular faces that form a tetrahedral complex
 GEOMETRY_API std::shared_ptr<VolumeMesh> operand_to_openvolumemesh(
-    Geometry* mesh_operand);
+    const Geometry* mesh_operand);
 
 GEOMETRY_API std::shared_ptr<Geometry> openvolumemesh_to_operand(
     VolumeMesh* volumemesh);

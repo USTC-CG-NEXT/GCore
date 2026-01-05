@@ -382,7 +382,7 @@ void fast_tetrahedral_reconstruction(
 }
 }  // namespace
 
-std::shared_ptr<VolumeMesh> operand_to_openvolumemesh(Geometry* mesh_operand)
+std::shared_ptr<VolumeMesh> operand_to_openvolumemesh(const Geometry* mesh_operand)
 {
     auto volumemesh = std::make_shared<VolumeMesh>();
     if (!mesh_operand)
