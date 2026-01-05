@@ -153,14 +153,14 @@ TEST_F(OpenVolumeMeshBindTest, SingleTetrahedronFromTriangles)
     CreateSingleTetrahedron();
 
     // Convert to OpenVolumeMesh from triangular faces
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     // Verify the conversion
     EXPECT_EQ(volume_mesh->n_vertices(), 4);  // Should have 4 vertices
     EXPECT_EQ(volume_mesh->n_cells(), 1);     // Should have 1 tetrahedron
 
     // Convert back to operand
-    auto reconstructed = openvolulemesh_to_operand(volume_mesh.get());
+    auto reconstructed = openvolumemesh_to_operand(volume_mesh.get());
     auto reconstructed_mesh = reconstructed->get_component<MeshComponent>();
 
     // Verify round-trip conversion
@@ -174,14 +174,14 @@ TEST_F(OpenVolumeMeshBindTest, SingleTetrahedronAsCell)
     CreateSingleTetrahedronAsCell();
 
     // Convert to OpenVolumeMesh (input as 4-vertex cell)
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     // Verify the conversion
     EXPECT_EQ(volume_mesh->n_vertices(), 4);  // Should have 4 vertices
     EXPECT_EQ(volume_mesh->n_cells(), 1);     // Should have 1 tetrahedron
 
     // Convert back to operand
-    auto reconstructed = openvolulemesh_to_operand(volume_mesh.get());
+    auto reconstructed = openvolumemesh_to_operand(volume_mesh.get());
     auto reconstructed_mesh = reconstructed->get_component<MeshComponent>();
 
     // Verify round-trip conversion
@@ -195,7 +195,7 @@ TEST_F(OpenVolumeMeshBindTest, TwoAdjacentTetrahedraFromTriangles)
     CreateTwoAdjacentTetrahedra();
 
     // Convert to OpenVolumeMesh from triangular faces
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     // Verify the conversion - should reconstruct 2 tetrahedra from triangle
     // faces
@@ -203,7 +203,7 @@ TEST_F(OpenVolumeMeshBindTest, TwoAdjacentTetrahedraFromTriangles)
     EXPECT_EQ(volume_mesh->n_cells(), 2);     // Should have 2 tetrahedra
 
     // Convert back to operand
-    auto reconstructed = openvolulemesh_to_operand(volume_mesh.get());
+    auto reconstructed = openvolumemesh_to_operand(volume_mesh.get());
     auto reconstructed_mesh = reconstructed->get_component<MeshComponent>();
 
     // Verify round-trip conversion
@@ -216,14 +216,14 @@ TEST_F(OpenVolumeMeshBindTest, TwoTetrahedraAsCells)
     CreateTwoTetrahedraAsCells();
 
     // Convert to OpenVolumeMesh (input as 4-vertex cells)
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     // Verify the conversion
     EXPECT_EQ(volume_mesh->n_vertices(), 5);  // Should have 5 vertices
     EXPECT_EQ(volume_mesh->n_cells(), 2);     // Should have 2 tetrahedra
 
     // Convert back to operand
-    auto reconstructed = openvolulemesh_to_operand(volume_mesh.get());
+    auto reconstructed = openvolumemesh_to_operand(volume_mesh.get());
     auto reconstructed_mesh = reconstructed->get_component<MeshComponent>();
 
     // Verify round-trip conversion
@@ -234,7 +234,7 @@ TEST_F(OpenVolumeMeshBindTest, TwoTetrahedraAsCells)
 TEST_F(OpenVolumeMeshBindTest, EmptyMeshHandling)
 {
     // Test with empty mesh
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     EXPECT_EQ(volume_mesh->n_vertices(), 0);
     EXPECT_EQ(volume_mesh->n_cells(), 0);
@@ -260,7 +260,7 @@ TEST_F(OpenVolumeMeshBindTest, InvalidTriangleHandling)
     mesh->set_face_vertex_indices(faceVertexIndices);
     mesh->set_face_vertex_counts(faceVertexCounts);
 
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     EXPECT_EQ(volume_mesh->n_vertices(), 5);
     // Should handle gracefully - limited tetrahedra due to mixed face types
@@ -289,13 +289,13 @@ TEST_F(OpenVolumeMeshBindTest, LargeTetrahedralMeshFromCells)
     mesh->set_face_vertex_indices(cellVertexIndices);
     mesh->set_face_vertex_counts(cellVertexCounts);
 
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     EXPECT_EQ(volume_mesh->n_vertices(), 8);
     EXPECT_EQ(volume_mesh->n_cells(), 6);
 
     // Test round-trip conversion
-    auto reconstructed = openvolulemesh_to_operand(volume_mesh.get());
+    auto reconstructed = openvolumemesh_to_operand(volume_mesh.get());
     auto reconstructed_mesh = reconstructed->get_component<MeshComponent>();
 
     EXPECT_EQ(reconstructed_mesh->get_vertices().size(), 8);
@@ -324,8 +324,8 @@ TEST_F(OpenVolumeMeshBindTest, VertexDataPreservation)
     mesh->set_face_vertex_indices(cellVertexIndices);
     mesh->set_face_vertex_counts(cellVertexCounts);
 
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
-    auto reconstructed = openvolulemesh_to_operand(volume_mesh.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
+    auto reconstructed = openvolumemesh_to_operand(volume_mesh.get());
     auto reconstructed_mesh = reconstructed->get_component<MeshComponent>();
 
     const auto& reconstructed_vertices = reconstructed_mesh->get_vertices();
@@ -366,8 +366,8 @@ TEST_F(OpenVolumeMeshBindTest, TetrahedralMeshWithAttributes)
     };
     mesh->set_display_color(colors);
 
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
-    auto reconstructed = openvolulemesh_to_operand(volume_mesh.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
+    auto reconstructed = openvolumemesh_to_operand(volume_mesh.get());
     auto reconstructed_mesh = reconstructed->get_component<MeshComponent>();
 
     // Verify that mesh structure is preserved (attributes might be lost in
@@ -436,7 +436,7 @@ TEST_F(OpenVolumeMeshBindTest, ComplexTetrahedralMeshStressTest)
     mesh->set_face_vertex_indices(cellVertexIndices);
     mesh->set_face_vertex_counts(cellVertexCounts);
 
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     EXPECT_EQ(volume_mesh->n_vertices(), grid_size * grid_size * grid_size);
     EXPECT_GT(volume_mesh->n_cells(), 0);
@@ -572,7 +572,7 @@ TEST_F(OpenVolumeMeshBindTest, ComplexPyramidMeshForFEM)
     mesh->set_face_vertex_counts(cellVertexCounts);
 
     // Test conversion to OpenVolumeMesh
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     EXPECT_EQ(volume_mesh->n_vertices(), 5);
     EXPECT_EQ(volume_mesh->n_cells(), 2);
@@ -645,7 +645,7 @@ TEST_F(OpenVolumeMeshBindTest, ComplexPyramidMeshForFEM)
     EXPECT_EQ(total_processed_cells, 2);
 
     // Test round-trip conversion
-    auto reconstructed = openvolulemesh_to_operand(volume_mesh.get());
+    auto reconstructed = openvolumemesh_to_operand(volume_mesh.get());
     auto reconstructed_mesh = reconstructed->get_component<MeshComponent>();
 
     EXPECT_EQ(reconstructed_mesh->get_vertices().size(), 5);
@@ -657,7 +657,7 @@ TEST_F(OpenVolumeMeshBindTest, FEMSolverCompatibilityTest)
     // Test that mimics exactly how FEMSolver3D would use the volume mesh
     CreateSingleTetrahedron();
 
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     // Simulate FEM assembly process
     int n_vertices = volume_mesh->n_vertices();
@@ -769,12 +769,12 @@ TEST_F(OpenVolumeMeshBindTest, FEMSolverCompatibilityTest)
 TEST_F(OpenVolumeMeshBindTest, ErrorHandlingTests)
 {
     // Test null pointer handling
-    auto null_volume_mesh = operand_to_openvolulemesh(nullptr);
+    auto null_volume_mesh = operand_to_openvolumemesh(nullptr);
     EXPECT_TRUE(null_volume_mesh->n_vertices() == 0);
 
     // Test with geometry having no mesh component
     auto bare_geometry = std::make_shared<Geometry>();
-    auto result = operand_to_openvolulemesh(bare_geometry.get());
+    auto result = operand_to_openvolumemesh(bare_geometry.get());
     EXPECT_EQ(result->n_vertices(), 0);
 }
 
@@ -796,7 +796,7 @@ TEST_F(OpenVolumeMeshBindTest, InvalidVertexHandling)
     mesh->set_face_vertex_indices(cellVertexIndices);
     mesh->set_face_vertex_counts(cellVertexCounts);
 
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
     EXPECT_EQ(volume_mesh->n_vertices(), 4);
     // Invalid tetrahedron should be rejected
 }
@@ -914,7 +914,7 @@ TEST_F(OpenVolumeMeshBindTest, ComplexMultiLevelPyramidFEMStressTest)
     mesh->set_face_vertex_counts(cellVertexCounts);
 
     // Convert to volume mesh and test
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     // Verify basic structure
     EXPECT_EQ(volume_mesh->n_vertices(), vertices.size());
@@ -1202,7 +1202,7 @@ TEST_F(OpenVolumeMeshBindTest, ActualFEMSolverIntegrationTest)
     // Test with actual FEM solver usage pattern
     CreateSingleTetrahedronAsCell();
 
-    auto volume_mesh = operand_to_openvolulemesh(geometry.get());
+    auto volume_mesh = operand_to_openvolumemesh(geometry.get());
 
     // Test that we can extract all the information that FEMSolver3D needs
     bool integration_test_passed = true;

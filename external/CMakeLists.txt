@@ -17,6 +17,19 @@ set(LIBIGL_RESTRICTED_TRIANGLE ON CACHE BOOL "" FORCE)
 add_subdirectory(libigl)
 set_target_properties(igl_core PROPERTIES ${OUTPUT_DIR})
 
+# tetgen (reference from geometry_nodes)
+set(TETGEN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../geometry_nodes/tetgen")
+add_library(tetgen_geom STATIC 
+    ${TETGEN_SOURCE_DIR}/tetgen.cxx 
+    ${TETGEN_SOURCE_DIR}/tetgen.h 
+    ${TETGEN_SOURCE_DIR}/predicates.cxx)
+set_target_properties(tetgen_geom PROPERTIES ${OUTPUT_DIR})
+target_include_directories(tetgen_geom PUBLIC ${TETGEN_SOURCE_DIR})
+if(MSVC)
+    target_compile_options(tetgen_geom PRIVATE /wd4477)
+endif()
+set_target_properties(tetgen_geom PROPERTIES FOLDER "ThirdParty")
+
 set_target_properties(OpenMeshCore PROPERTIES FOLDER "ThirdParty")
 set_target_properties(OpenMeshTools PROPERTIES FOLDER "ThirdParty")
 set_target_properties(igl_core PROPERTIES FOLDER "ThirdParty")
