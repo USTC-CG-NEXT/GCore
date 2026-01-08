@@ -26,7 +26,7 @@ Geometry::~Geometry()
 void Geometry::apply_transform()
 {
     auto xform_component = get_const_component<XformComponent>();
-    if (!xform_component) {
+    if (!xform_component || xform_component->is_identity()) {
         return;
     }
 

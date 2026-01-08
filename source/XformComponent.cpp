@@ -27,6 +27,10 @@ void XformComponent::apply_transform(const glm::mat4& transform)
     scale.clear();
     rotation.clear();
 }
+bool XformComponent::is_identity() const
+{
+    return translation.empty() && scale.empty() && rotation.empty();
+}
 
 glm::mat4 XformComponent::get_transform() const
 {

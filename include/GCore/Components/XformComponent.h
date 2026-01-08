@@ -3,7 +3,6 @@
 #include "GCore/Components.h"
 #include "GCore/api.h"
 
-
 RUZINO_NAMESPACE_OPEN_SCOPE
 // Stores the chain of transformation
 
@@ -11,7 +10,7 @@ class GEOMETRY_API XformComponent : public GeometryComponent {
    public:
     GeometryComponentHandle copy(Geometry* operand) const override;
     std::string to_string() const override;
-    
+
     size_t hash() const override
     {
         size_t h = 0;
@@ -39,6 +38,8 @@ class GEOMETRY_API XformComponent : public GeometryComponent {
     }
 
     void apply_transform(const glm::mat4& transform) override;
+
+    bool is_identity() const;
 
     glm::mat4 get_transform() const;
 
