@@ -422,37 +422,35 @@ ConstMeshUSDView::get_face_corner_parameterization_quantity(
 pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::vec3f_array_to_vt_array(
     const std::vector<glm::vec3>& array)
 {
-    pxr::VtArray<pxr::GfVec3f> vt_array(array.size());
-    for (size_t i = 0; i < array.size(); ++i) {
-        vt_array[i] = pxr::GfVec3f(array[i].x, array[i].y, array[i].z);
-    }
-    return vt_array;
+    // glm::vec3 and pxr::GfVec3f have compatible memory layout (both are 3 floats)
+    static_assert(sizeof(glm::vec3) == sizeof(pxr::GfVec3f), 
+                  "glm::vec3 and pxr::GfVec3f must have the same size");
+    return pxr::VtArray<pxr::GfVec3f>(
+        reinterpret_cast<const pxr::GfVec3f*>(array.data()),
+        reinterpret_cast<const pxr::GfVec3f*>(array.data() + array.size()));
 }
 
 pxr::VtArray<pxr::GfVec2f> ConstMeshUSDView::vec2f_array_to_vt_array(
     const std::vector<glm::vec2>& array)
 {
-    pxr::VtArray<pxr::GfVec2f> vt_array(array.size());
-    for (size_t i = 0; i < array.size(); ++i) {
-        vt_array[i] = pxr::GfVec2f(array[i].x, array[i].y);
-    }
-    return vt_array;
+    // glm::vec2 and pxr::GfVec2f have compatible memory layout (both are 2 floats)
+    static_assert(sizeof(glm::vec2) == sizeof(pxr::GfVec2f),
+                  "glm::vec2 and pxr::GfVec2f must have the same size");
+    return pxr::VtArray<pxr::GfVec2f>(
+        reinterpret_cast<const pxr::GfVec2f*>(array.data()),
+        reinterpret_cast<const pxr::GfVec2f*>(array.data() + array.size()));
 }
 
 pxr::VtArray<float> ConstMeshUSDView::float_array_to_vt_array(
     const std::vector<float>& array)
 {
-    pxr::VtArray<float> vt_array(array.size());
-    std::memcpy(vt_array.data(), array.data(), array.size() * sizeof(float));
-    return vt_array;
+    return pxr::VtArray<float>(array.begin(), array.end());
 }
 
 pxr::VtArray<int> ConstMeshUSDView::int_array_to_vt_array(
     const std::vector<int>& array)
 {
-    pxr::VtArray<int> vt_array(array.size());
-    std::memcpy(vt_array.data(), array.data(), array.size() * sizeof(int));
-    return vt_array;
+    return pxr::VtArray<int>(array.begin(), array.end());
 }
 
 // MeshUSDView Implementation
