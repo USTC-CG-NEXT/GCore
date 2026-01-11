@@ -27,8 +27,10 @@ Geometry create_grid(int resolution, float size)
 
     for (int i = 0; i < resolution; ++i) {
         for (int j = 0; j < resolution; ++j) {
-            float x = size * static_cast<float>(i) / (resolution - 1) - size * 0.5f;
-            float y = size * static_cast<float>(j) / (resolution - 1) - size * 0.5f;
+            float x =
+                size * static_cast<float>(i) / (resolution - 1) - size * 0.5f;
+            float y =
+                size * static_cast<float>(j) / (resolution - 1) - size * 0.5f;
 
             float u = static_cast<float>(i) / (resolution - 1);
             float v = static_cast<float>(j) / (resolution - 1);
@@ -794,84 +796,87 @@ Geometry create_box_grid(
     int nx = resolution_x + 1;
     int ny = resolution_y + 1;
     int nz = resolution_z + 1;
-    
+
     // Generate all vertices in 3D grid
     std::vector<int> vertexGrid(nx * ny * nz);
     int vertexIndex = 0;
-    
+
     for (int iz = 0; iz < nz; ++iz) {
         float z = -halfDepth + (depth * iz) / resolution_z;
         for (int iy = 0; iy < ny; ++iy) {
             float y = -halfHeight + (height * iy) / resolution_y;
             for (int ix = 0; ix < nx; ++ix) {
                 float x = -halfWidth + (width * ix) / resolution_x;
-                
+
                 points.push_back(glm::vec3(x, y, z));
-                texcoord.push_back(glm::vec2(0.0f, 0.0f)); // Will be updated per face
-                
+                texcoord.push_back(
+                    glm::vec2(0.0f, 0.0f));  // Will be updated per face
+
                 vertexGrid[iz * ny * nx + iy * nx + ix] = vertexIndex++;
             }
         }
     }
-    
+
     // Helper to get vertex index from 3D grid position
     auto getVertexIndex = [&](int ix, int iy, int iz) -> int {
         return vertexGrid[iz * ny * nx + iy * nx + ix];
     };
-    
+
     // Helper to add a quad face
-    auto addQuadFace = [&](int v0, int v1, int v2, int v3, const glm::vec3& normal) {
-        if (add_diagonal) {
-            // Split into two triangles
-            faceVertexCounts.push_back(3);
-            faceVertexIndices.push_back(v0);
-            faceVertexIndices.push_back(v1);
-            faceVertexIndices.push_back(v2);
-            
-            faceVertexCounts.push_back(3);
-            faceVertexIndices.push_back(v0);
-            faceVertexIndices.push_back(v2);
-            faceVertexIndices.push_back(v3);
-        } else {
-            // Keep as quad
-            faceVertexCounts.push_back(4);
-            faceVertexIndices.push_back(v0);
-            faceVertexIndices.push_back(v1);
-            faceVertexIndices.push_back(v2);
-            faceVertexIndices.push_back(v3);
-        }
-    };
-    
+    auto addQuadFace =
+        [&](int v0, int v1, int v2, int v3, const glm::vec3& normal) {
+            if (add_diagonal) {
+                // Split into two triangles
+                faceVertexCounts.push_back(3);
+                faceVertexIndices.push_back(v0);
+                faceVertexIndices.push_back(v1);
+                faceVertexIndices.push_back(v2);
+
+                faceVertexCounts.push_back(3);
+                faceVertexIndices.push_back(v0);
+                faceVertexIndices.push_back(v2);
+                faceVertexIndices.push_back(v3);
+            }
+            else {
+                // Keep as quad
+                faceVertexCounts.push_back(4);
+                faceVertexIndices.push_back(v0);
+                faceVertexIndices.push_back(v1);
+                faceVertexIndices.push_back(v2);
+                faceVertexIndices.push_back(v3);
+            }
+        };
+
     // Generate hexahedral cells (cubes) filling the volume
     for (int iz = 0; iz < resolution_z; ++iz) {
         for (int iy = 0; iy < resolution_y; ++iy) {
             for (int ix = 0; ix < resolution_x; ++ix) {
                 // Get the 8 vertices of this hexahedron
-                int v000 = getVertexIndex(ix,     iy,     iz);
-                int v100 = getVertexIndex(ix + 1, iy,     iz);
+                int v000 = getVertexIndex(ix, iy, iz);
+                int v100 = getVertexIndex(ix + 1, iy, iz);
                 int v110 = getVertexIndex(ix + 1, iy + 1, iz);
-                int v010 = getVertexIndex(ix,     iy + 1, iz);
-                int v001 = getVertexIndex(ix,     iy,     iz + 1);
-                int v101 = getVertexIndex(ix + 1, iy,     iz + 1);
+                int v010 = getVertexIndex(ix, iy + 1, iz);
+                int v001 = getVertexIndex(ix, iy, iz + 1);
+                int v101 = getVertexIndex(ix + 1, iy, iz + 1);
                 int v111 = getVertexIndex(ix + 1, iy + 1, iz + 1);
-                int v011 = getVertexIndex(ix,     iy + 1, iz + 1);
-                
+                int v011 = getVertexIndex(ix, iy + 1, iz + 1);
+
                 // Add all 6 faces of the hexahedron
                 // Front face (Z-)
                 addQuadFace(v000, v010, v110, v100, glm::vec3(0, 0, -1));
-                
+
                 // Back face (Z+)
                 addQuadFace(v101, v111, v011, v001, glm::vec3(0, 0, 1));
-                
+
                 // Right face (X+)
                 addQuadFace(v100, v110, v111, v101, glm::vec3(1, 0, 0));
-                
+
                 // Left face (X-)
                 addQuadFace(v001, v011, v010, v000, glm::vec3(-1, 0, 0));
-                
+
                 // Top face (Y+)
                 addQuadFace(v010, v011, v111, v110, glm::vec3(0, 1, 0));
-                
+
                 // Bottom face (Y-)
                 addQuadFace(v001, v000, v100, v101, glm::vec3(0, -1, 0));
             }
@@ -879,6 +884,176 @@ Geometry create_box_grid(
     }
 
     mesh->set_vertices(points);
+    mesh->set_face_vertex_indices(faceVertexIndices);
+    mesh->set_face_vertex_counts(faceVertexCounts);
+    mesh->set_texcoords_array(texcoord);
+
+    return geometry;
+}
+
+Geometry create_subdivided_tetrahedron(int subdivisions, float size)
+{
+    Geometry geometry;
+    std::shared_ptr<MeshComponent> mesh =
+        std::make_shared<MeshComponent>(&geometry);
+    geometry.attach_component(mesh);
+
+    // Structure to represent a tetrahedron by 4 vertex indices
+    struct Tet {
+        int v[4];
+        Tet(int v0, int v1, int v2, int v3)
+        {
+            v[0] = v0;
+            v[1] = v1;
+            v[2] = v2;
+            v[3] = v3;
+        }
+    };
+
+    // Optimized triangle key using 64-bit hash
+    struct TriKey {
+        uint64_t key;
+        TriKey(int a, int b, int c)
+        {
+            int v[3] = { a, b, c };
+            std::sort(v, v + 3);
+            key = ((uint64_t)v[0] << 42) | ((uint64_t)v[1] << 21) |
+                  (uint64_t)v[2];
+        }
+        bool operator<(const TriKey& o) const
+        {
+            return key < o.key;
+        }
+    };
+
+    // Store original face data with key
+    struct FaceData {
+        int v[3];
+        int tetIdx;
+    };
+
+    std::vector<glm::vec3> vertices;
+    std::vector<Tet> tets;
+
+    // Create initial regular tetrahedron vertices
+    float a = size / std::sqrt(2.0f) / 2.0f;
+    vertices.push_back(glm::vec3(a, a, a));
+    vertices.push_back(glm::vec3(a, -a, -a));
+    vertices.push_back(glm::vec3(-a, a, -a));
+    vertices.push_back(glm::vec3(-a, -a, a));
+
+    // Initial tetrahedron
+    tets.push_back(Tet(0, 1, 2, 3));
+
+    // Helper to get or create midpoint vertex
+    std::map<std::pair<int, int>, int> edgeMidpoints;
+    auto getMidpoint = [&](int v1, int v2) -> int {
+        if (v1 > v2)
+            std::swap(v1, v2);
+        std::pair<int, int> edge(v1, v2);
+        auto it = edgeMidpoints.find(edge);
+        if (it != edgeMidpoints.end()) {
+            return it->second;
+        }
+        glm::vec3 mid = (vertices[v1] + vertices[v2]) * 0.5f;
+        int newIdx = vertices.size();
+        vertices.push_back(mid);
+        edgeMidpoints[edge] = newIdx;
+        return newIdx;
+    };
+
+    // Subdivide tetrahedra recursively
+    for (int sub = 0; sub < subdivisions; ++sub) {
+        std::vector<Tet> newTets;
+        edgeMidpoints.clear();
+
+        for (const Tet& tet : tets) {
+            int v0 = tet.v[0], v1 = tet.v[1], v2 = tet.v[2], v3 = tet.v[3];
+
+            // Get midpoints of all 6 edges
+            int m01 = getMidpoint(v0, v1);
+            int m02 = getMidpoint(v0, v2);
+            int m03 = getMidpoint(v0, v3);
+            int m12 = getMidpoint(v1, v2);
+            int m13 = getMidpoint(v1, v3);
+            int m23 = getMidpoint(v2, v3);
+
+            // Create 8 sub-tetrahedra:
+            // 4 corner tets
+            newTets.push_back(Tet(v0, m01, m02, m03));
+            newTets.push_back(Tet(v1, m01, m12, m13));
+            newTets.push_back(Tet(v2, m02, m12, m23));
+            newTets.push_back(Tet(v3, m03, m13, m23));
+
+            // 4 octahedral tets (center region split into 4 tets)
+            newTets.push_back(Tet(m01, m02, m12, m23));
+            newTets.push_back(Tet(m01, m02, m03, m23));
+            newTets.push_back(Tet(m01, m03, m13, m23));
+            newTets.push_back(Tet(m01, m12, m13, m23));
+        }
+
+        tets = newTets;
+    }
+
+    // Output ALL tetrahedral faces (not just surface)
+    // This is required for compute_volume_adjacency_gpu to work
+    std::vector<int> faceVertexIndices;
+    std::vector<int> faceVertexCounts;
+
+    faceVertexIndices.reserve(
+        tets.size() * 12);  // 4 faces × 3 vertices per tet
+    faceVertexCounts.reserve(tets.size() * 4);
+
+    for (size_t tetIdx = 0; tetIdx < tets.size(); ++tetIdx) {
+        const Tet& tet = tets[tetIdx];
+
+        // Four faces of tetrahedron with consistent winding
+        // Following TetGen convention (opposite vertex determines face)
+        int faces[4][3] = {
+            { tet.v[1], tet.v[2], tet.v[3] },  // opposite to v0
+            { tet.v[0], tet.v[3], tet.v[2] },  // opposite to v1
+            { tet.v[0], tet.v[1], tet.v[3] },  // opposite to v2
+            { tet.v[0], tet.v[2], tet.v[1] }   // opposite to v3
+        };
+
+        for (int f = 0; f < 4; ++f) {
+            faceVertexCounts.push_back(3);
+            faceVertexIndices.push_back(faces[f][0]);
+            faceVertexIndices.push_back(faces[f][1]);
+            faceVertexIndices.push_back(faces[f][2]);
+        }
+    }
+
+    // Compute normals per face
+    std::vector<glm::vec3> normals;
+    normals.reserve(faceVertexCounts.size());
+
+    for (size_t i = 0; i < faceVertexCounts.size(); ++i) {
+        int v0 = faceVertexIndices[i * 3 + 0];
+        int v1 = faceVertexIndices[i * 3 + 1];
+        int v2 = faceVertexIndices[i * 3 + 2];
+
+        glm::vec3 p0 = vertices[v0];
+        glm::vec3 p1 = vertices[v1];
+        glm::vec3 p2 = vertices[v2];
+        glm::vec3 edge1 = p1 - p0;
+        glm::vec3 edge2 = p2 - p0;
+        glm::vec3 normal = normalize(glm::cross(edge1, edge2));
+
+        normals.push_back(normal);
+    }
+
+    // Generate texture coordinates (simple spherical mapping)
+    std::vector<glm::vec2> texcoord(vertices.size());
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        glm::vec3 normalized = normalize(vertices[i]);
+        float u = 0.5f + std::atan2(normalized.y, normalized.x) / (2.0f * M_PI);
+        float v = 0.5f - std::asin(normalized.z) / M_PI;
+        texcoord[i] = glm::vec2(u, v);
+    }
+
+    mesh->set_vertices(vertices);
+    mesh->set_normals(normals);
     mesh->set_face_vertex_indices(faceVertexIndices);
     mesh->set_face_vertex_counts(faceVertexCounts);
     mesh->set_texcoords_array(texcoord);
