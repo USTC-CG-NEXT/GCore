@@ -47,5 +47,6 @@ Geometry GEOMETRY_API create_box_grid(
 Geometry GEOMETRY_API create_subdivided_tetrahedron(
     int subdivisions,
     float size);
+Geometry GEOMETRY_API create_double_tetrahedron(float size);
 
 RUZINO_NAMESPACE_CLOSE_SCOPE

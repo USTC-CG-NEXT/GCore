@@ -1061,4 +1061,76 @@ Geometry create_subdivided_tetrahedron(int subdivisions, float size)
     return geometry;
 }
 
+Geometry create_double_tetrahedron(float size)
+{
+    Geometry geometry;
+    std::shared_ptr<MeshComponent> mesh =
+        std::make_shared<MeshComponent>(&geometry);
+    geometry.attach_component(mesh);
+
+    std::vector<glm::vec3> points;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec2> texcoord;
+    std::vector<int> faceVertexIndices;
+    std::vector<int> faceVertexCounts;
+
+    // Create a SINGLE regular tetrahedron centered at origin for perfect symmetry
+    // This ensures strictly vertical motion under gravity
+    float height = size * std::sqrt(2.0f / 3.0f);
+    float radius = size / std::sqrt(3.0f);
+    
+    // Base triangle vertices (in xy-plane, z = -h/4 for center of mass at origin)
+    float base_z = -height / 4.0f;
+    points.push_back(glm::vec3(radius, 0.0f, base_z));
+    points.push_back(glm::vec3(-radius / 2.0f, radius * std::sqrt(3.0f) / 2.0f, base_z));
+    points.push_back(glm::vec3(-radius / 2.0f, -radius * std::sqrt(3.0f) / 2.0f, base_z));
+    
+    // Apex vertex (on z-axis, positioned for center of mass at origin)
+    // For tetrahedron: CoM = (v0+v1+v2+v3)/4 should be at origin
+    // base_z * 3 + apex_z = 0  =>  apex_z = -3*base_z = 3h/4
+    float apex_z = 3.0f * height / 4.0f;
+    points.push_back(glm::vec3(0.0f, 0.0f, apex_z));
+    
+    // Define 4 faces with consistent outward-pointing normals
+    // Using right-hand rule: vertices ordered counter-clockwise when viewed from outside
+    int faces[4][3] = {
+        {0, 2, 1},  // Bottom face (base triangle, normal pointing down)
+        {0, 1, 3},  // Side face 1
+        {1, 2, 3},  // Side face 2
+        {2, 0, 3}   // Side face 3
+    };
+    
+    for (int i = 0; i < 4; ++i) {
+        faceVertexCounts.push_back(3);
+        faceVertexIndices.push_back(faces[i][0]);
+        faceVertexIndices.push_back(faces[i][1]);
+        faceVertexIndices.push_back(faces[i][2]);
+
+        glm::vec3 p0 = points[faces[i][0]];
+        glm::vec3 p1 = points[faces[i][1]];
+        glm::vec3 p2 = points[faces[i][2]];
+        glm::vec3 edge1 = p1 - p0;
+        glm::vec3 edge2 = p2 - p0;
+        glm::vec3 normal = normalize(glm::cross(edge1, edge2));
+        normals.push_back(normal);
+    }
+
+    // Generate texture coordinates
+    texcoord.resize(points.size());
+    for (size_t i = 0; i < points.size(); ++i) {
+        glm::vec3 normalized = normalize(points[i]);
+        float u = 0.5f + std::atan2(normalized.y, normalized.x) / (2.0f * M_PI);
+        float v = 0.5f - std::asin(normalized.z) / M_PI;
+        texcoord[i] = glm::vec2(u, v);
+    }
+
+    mesh->set_vertices(points);
+    mesh->set_normals(normals);
+    mesh->set_face_vertex_indices(faceVertexIndices);
+    mesh->set_face_vertex_counts(faceVertexCounts);
+    mesh->set_texcoords_array(texcoord);
+
+    return geometry;
+}
+
 RUZINO_NAMESPACE_CLOSE_SCOPE
