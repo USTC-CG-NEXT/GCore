@@ -1004,6 +1004,10 @@ Geometry create_subdivided_tetrahedron(int subdivisions, float size)
         tets.size() * 12);  // 4 faces × 3 vertices per tet
     faceVertexCounts.reserve(tets.size() * 4);
 
+    // Track face occurrences to identify surface faces
+    // Surface faces appear once, interior faces appear twice
+    std::map<TriKey, int> faceOccurrences;
+
     for (size_t tetIdx = 0; tetIdx < tets.size(); ++tetIdx) {
         const Tet& tet = tets[tetIdx];
 
@@ -1021,7 +1025,26 @@ Geometry create_subdivided_tetrahedron(int subdivisions, float size)
             faceVertexIndices.push_back(faces[f][0]);
             faceVertexIndices.push_back(faces[f][1]);
             faceVertexIndices.push_back(faces[f][2]);
+
+            // Track face occurrence count
+            TriKey key(faces[f][0], faces[f][1], faces[f][2]);
+            faceOccurrences[key]++;
         }
+    }
+
+    // Create surface markers: 1.0 for surface faces, 0.0 for interior faces
+    std::vector<float> surface_markers;
+    surface_markers.reserve(faceVertexCounts.size());
+
+    for (size_t i = 0; i < faceVertexCounts.size(); ++i) {
+        int v0 = faceVertexIndices[i * 3 + 0];
+        int v1 = faceVertexIndices[i * 3 + 1];
+        int v2 = faceVertexIndices[i * 3 + 2];
+
+        TriKey key(v0, v1, v2);
+        // Surface faces appear only once in the mesh
+        float marker = (faceOccurrences[key] == 1) ? 1.0f : 0.0f;
+        surface_markers.push_back(marker);
     }
 
     // Compute normals per face
@@ -1057,6 +1080,9 @@ Geometry create_subdivided_tetrahedron(int subdivisions, float size)
     mesh->set_face_vertex_indices(faceVertexIndices);
     mesh->set_face_vertex_counts(faceVertexCounts);
     mesh->set_texcoords_array(texcoord);
+
+    // Add surface marker as face scalar quantity
+    mesh->add_face_scalar_quantity("surf_of_vol", surface_markers);
 
     return geometry;
 }

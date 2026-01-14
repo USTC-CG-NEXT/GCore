@@ -3,7 +3,6 @@
 #include "GCore/Components/MeshComponent.h"
 #include "tetgen.h"
 
-
 RUZINO_NAMESPACE_OPEN_SCOPE
 
 namespace geom_algorithm {
@@ -196,8 +195,7 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
         output_mesh->set_face_vertex_counts(output_face_counts);
 
         // Add surface marker as face scalar quantity
-        output_mesh->add_face_scalar_quantity(
-            "surface_marker", surface_markers);
+        output_mesh->add_face_scalar_quantity("surf_of_vol", surface_markers);
 
         // tetgenio destructors will clean up automatically
         return output_geometry;
