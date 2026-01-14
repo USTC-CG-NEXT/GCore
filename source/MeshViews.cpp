@@ -92,17 +92,7 @@ Eigen::MatrixXf ConstMeshIGLView::get_face_vector_quantity(
     return vec3f_array_to_matrix(mesh_.get_face_vector_quantity(name));
 }
 
-Eigen::MatrixXf ConstMeshIGLView::get_vertex_color_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_matrix(mesh_.get_vertex_color_quantity(name));
-}
 
-Eigen::MatrixXf ConstMeshIGLView::get_face_color_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_matrix(mesh_.get_face_color_quantity(name));
-}
 
 Eigen::MatrixXf ConstMeshIGLView::get_vertex_parameterization_quantity(
     const std::string& name) const
@@ -252,21 +242,6 @@ void MeshIGLView::set_face_vector_quantity(
         name, matrix_to_vec3f_array(vectors));
 }
 
-void MeshIGLView::set_vertex_color_quantity(
-    const std::string& name,
-    const Eigen::MatrixXf& colors)
-{
-    mutable_mesh_.add_vertex_color_quantity(
-        name, matrix_to_vec3f_array(colors));
-}
-
-void MeshIGLView::set_face_color_quantity(
-    const std::string& name,
-    const Eigen::MatrixXf& colors)
-{
-    mutable_mesh_.add_face_color_quantity(name, matrix_to_vec3f_array(colors));
-}
-
 void MeshIGLView::set_vertex_parameterization_quantity(
     const std::string& name,
     const Eigen::MatrixXf& params)
@@ -390,18 +365,6 @@ pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_face_vector_quantity(
     return vec3f_array_to_vt_array(mesh_.get_face_vector_quantity(name));
 }
 
-pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_vertex_color_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_vt_array(mesh_.get_vertex_color_quantity(name));
-}
-
-pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_face_color_quantity(
-    const std::string& name) const
-{
-    return vec3f_array_to_vt_array(mesh_.get_face_color_quantity(name));
-}
-
 pxr::VtArray<pxr::GfVec2f>
 ConstMeshUSDView::get_vertex_parameterization_quantity(
     const std::string& name) const
@@ -521,22 +484,6 @@ void MeshUSDView::set_face_vector_quantity(
 {
     mutable_mesh_.add_face_vector_quantity(
         name, vt_array_to_vec3f_array(vectors));
-}
-
-void MeshUSDView::set_vertex_color_quantity(
-    const std::string& name,
-    const pxr::VtArray<pxr::GfVec3f>& colors)
-{
-    mutable_mesh_.add_vertex_color_quantity(
-        name, vt_array_to_vec3f_array(colors));
-}
-
-void MeshUSDView::set_face_color_quantity(
-    const std::string& name,
-    const pxr::VtArray<pxr::GfVec3f>& colors)
-{
-    mutable_mesh_.add_face_color_quantity(
-        name, vt_array_to_vec3f_array(colors));
 }
 
 void MeshUSDView::set_vertex_parameterization_quantity(

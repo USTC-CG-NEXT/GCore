@@ -117,16 +117,6 @@ NB_MODULE(geometry_py, m)
         .def("get_face_scalar_quantity_names", &MeshComponent::get_face_scalar_quantity_names)
         .def("add_face_scalar_quantity", &MeshComponent::add_face_scalar_quantity)
         .def("set_face_scalar_quantities", &MeshComponent::set_face_scalar_quantities)
-        // Vertex color quantities
-        .def("get_vertex_color_quantity", &MeshComponent::get_vertex_color_quantity)
-        .def("get_vertex_color_quantity_names", &MeshComponent::get_vertex_color_quantity_names)
-        .def("add_vertex_color_quantity", &MeshComponent::add_vertex_color_quantity)
-        .def("set_vertex_color_quantities", &MeshComponent::set_vertex_color_quantities)
-        // Face color quantities
-        .def("get_face_color_quantity", &MeshComponent::get_face_color_quantity)
-        .def("get_face_color_quantity_names", &MeshComponent::get_face_color_quantity_names)
-        .def("add_face_color_quantity", &MeshComponent::add_face_color_quantity)
-        .def("set_face_color_quantities", &MeshComponent::set_face_color_quantities)
         // Vertex vector quantities
         .def("get_vertex_vector_quantity", &MeshComponent::get_vertex_vector_quantity)
         .def("get_vertex_vector_quantity_names", &MeshComponent::get_vertex_vector_quantity_names)

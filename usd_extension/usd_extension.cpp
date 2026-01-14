@@ -134,7 +134,23 @@ bool write_geometry_to_usd(
                 auto colorPrimvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken("displayColor"),
                     pxr::SdfValueTypeNames->Color3fArray);
-                colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
+                
+                // Determine interpolation based on color count
+                size_t num_colors = mesh_usdview.get_display_colors().size();
+                size_t num_vertices = mesh_usdview.get_vertices().size();
+                size_t num_faces = mesh_usdview.get_face_vertex_counts().size();
+                
+                if (num_colors == num_vertices) {
+                    colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
+                }
+                else if (num_colors == num_faces) {
+                    colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->uniform);
+                }
+                else {
+                    // Default to vertex interpolation
+                    colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
+                }
+                
                 colorPrimvar.Set(mesh_usdview.get_display_colors(), time);
             }
             else {
@@ -189,26 +205,7 @@ bool write_geometry_to_usd(
                 primvar.Set(values, time);
             }
 
-            for (std::string& name : mesh->get_vertex_color_quantity_names()) {
-                auto values = mesh_usdview.get_vertex_color_quantity(name);
-                const std::string primvar_name = "vertex:color:" + name;
-                auto primvar = primVarAPI.CreatePrimvar(
-                    pxr::TfToken(primvar_name.c_str()),
-                    pxr::SdfValueTypeNames->Color3fArray);
-                primvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
-                primvar.Set(values, time);
-            }
 
-            for (const std::string& name :
-                 mesh->get_face_color_quantity_names()) {
-                auto values = mesh_usdview.get_face_color_quantity(name);
-                const std::string primvar_name = "face:color:" + name;
-                auto primvar = primVarAPI.CreatePrimvar(
-                    pxr::TfToken(primvar_name.c_str()),
-                    pxr::SdfValueTypeNames->Color3fArray);
-                primvar.SetInterpolation(pxr::UsdGeomTokens->uniform);
-                primvar.Set(values, time);
-            }
 
             for (const std::string& name :
                  mesh->get_vertex_vector_quantity_names()) {

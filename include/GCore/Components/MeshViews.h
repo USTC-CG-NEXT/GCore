@@ -53,10 +53,6 @@ struct GEOMETRY_API ConstMeshIGLView {
     Eigen::MatrixXf get_vertex_vector_quantity(const std::string& name) const;
     Eigen::MatrixXf get_face_vector_quantity(const std::string& name) const;
 
-    // Get color quantities
-    Eigen::MatrixXf get_vertex_color_quantity(const std::string& name) const;
-    Eigen::MatrixXf get_face_color_quantity(const std::string& name) const;
-
     // Get parameterization quantities
     Eigen::MatrixXf get_vertex_parameterization_quantity(
         const std::string& name) const;
@@ -116,14 +112,6 @@ struct GEOMETRY_API MeshIGLView : public ConstMeshIGLView {
         const std::string& name,
         const Eigen::MatrixXf& vectors);
 
-    // Set color quantities
-    void set_vertex_color_quantity(
-        const std::string& name,
-        const Eigen::MatrixXf& colors);
-    void set_face_color_quantity(
-        const std::string& name,
-        const Eigen::MatrixXf& colors);
-
     // Set parameterization quantities
     void set_vertex_parameterization_quantity(
         const std::string& name,
@@ -175,12 +163,6 @@ struct GEOMETRY_API ConstMeshUSDView {
     pxr::VtArray<pxr::GfVec3f> get_vertex_vector_quantity(
         const std::string& name) const;
     pxr::VtArray<pxr::GfVec3f> get_face_vector_quantity(
-        const std::string& name) const;
-
-    // Get color quantities
-    pxr::VtArray<pxr::GfVec3f> get_vertex_color_quantity(
-        const std::string& name) const;
-    pxr::VtArray<pxr::GfVec3f> get_face_color_quantity(
         const std::string& name) const;
 
     // Get parameterization quantities
@@ -238,14 +220,6 @@ struct GEOMETRY_API MeshUSDView : public ConstMeshUSDView {
     void set_face_vector_quantity(
         const std::string& name,
         const pxr::VtArray<pxr::GfVec3f>& vectors);
-
-    // Set color quantities
-    void set_vertex_color_quantity(
-        const std::string& name,
-        const pxr::VtArray<pxr::GfVec3f>& colors);
-    void set_face_color_quantity(
-        const std::string& name,
-        const pxr::VtArray<pxr::GfVec3f>& colors);
 
     // Set parameterization quantities
     void set_vertex_parameterization_quantity(

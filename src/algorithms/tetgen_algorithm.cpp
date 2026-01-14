@@ -1,6 +1,8 @@
 #include "GCore/algorithms/tetgen_algorithm.h"
+
 #include "GCore/Components/MeshComponent.h"
 #include "tetgen.h"
+
 
 RUZINO_NAMESPACE_OPEN_SCOPE
 
@@ -10,7 +12,7 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
 {
     Geometry input_copy = geometry;
     input_copy.apply_transform();
-    
+
     auto mesh_component = input_copy.get_const_component<MeshComponent>();
     if (!mesh_component) {
         throw std::runtime_error("No mesh component found in input geometry");
@@ -45,9 +47,11 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
         for (size_t i = 0; i < face_counts.size(); ++i) {
             if (face_counts[i] == 3) {
                 input.numberoffacets++;
-            } else {
+            }
+            else {
                 throw std::runtime_error(
-                    "TetGen only supports triangular faces. Please triangulate the mesh first.");
+                    "TetGen only supports triangular faces. Please triangulate "
+                    "the mesh first.");
             }
         }
 
@@ -110,52 +114,90 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
         output_points.reserve(output.numberofpoints);
 
         for (int i = 0; i < output.numberofpoints; ++i) {
-            output_points.push_back(glm::vec3(
-                output.pointlist[i * 3],
-                output.pointlist[i * 3 + 1],
-                output.pointlist[i * 3 + 2]));
+            output_points.push_back(
+                glm::vec3(
+                    output.pointlist[i * 3],
+                    output.pointlist[i * 3 + 1],
+                    output.pointlist[i * 3 + 2]));
         }
 
-        // Extract all tetrahedra faces as triangle soup
+        // Use TetGen's triangle face output (includes boundary and interior
+        // faces)
         std::vector<int> output_indices;
         std::vector<int> output_face_counts;
-        
-        output_indices.reserve(output.numberoftetrahedra * 12);
-        output_face_counts.reserve(output.numberoftetrahedra * 4);
+        std::vector<float>
+            surface_markers;  // Non-zero = boundary face, zero = interior face
 
-        for (int i = 0; i < output.numberoftetrahedra; ++i) {
-            int* tet = &output.tetrahedronlist[i * 4];
+        if (output.numberoftrifaces > 0) {
+            output_indices.reserve(output.numberoftrifaces * 3);
+            output_face_counts.reserve(output.numberoftrifaces);
+            surface_markers.reserve(output.numberoftrifaces);
 
-            // All 4 faces of the tetrahedron
-            // Face 0: (v1, v2, v3) - opposite to v0
-            output_face_counts.push_back(3);
-            output_indices.push_back(tet[1]);
-            output_indices.push_back(tet[2]);
-            output_indices.push_back(tet[3]);
+            for (int i = 0; i < output.numberoftrifaces; ++i) {
+                // Get triangle vertices
+                int* tri = &output.trifacelist[i * 3];
 
-            // Face 1: (v0, v3, v2) - opposite to v1
-            output_face_counts.push_back(3);
-            output_indices.push_back(tet[0]);
-            output_indices.push_back(tet[3]);
-            output_indices.push_back(tet[2]);
+                output_face_counts.push_back(3);
+                output_indices.push_back(tri[0]);
+                output_indices.push_back(tri[1]);
+                output_indices.push_back(tri[2]);
 
-            // Face 2: (v0, v1, v3) - opposite to v2
-            output_face_counts.push_back(3);
-            output_indices.push_back(tet[0]);
-            output_indices.push_back(tet[1]);
-            output_indices.push_back(tet[3]);
+                // Get surface marker (non-zero = boundary/surface face)
+                float marker =
+                    (output.trifacemarkerlist != nullptr)
+                        ? static_cast<float>(output.trifacemarkerlist[i])
+                        : 0.0f;
+                surface_markers.push_back(marker);
+            }
+        }
+        else {
+            // Fallback: extract all tetrahedra faces as triangle soup
+            output_indices.reserve(output.numberoftetrahedra * 12);
+            output_face_counts.reserve(output.numberoftetrahedra * 4);
+            surface_markers.reserve(output.numberoftetrahedra * 4);
 
-            // Face 3: (v0, v2, v1) - opposite to v3
-            output_face_counts.push_back(3);
-            output_indices.push_back(tet[0]);
-            output_indices.push_back(tet[2]);
-            output_indices.push_back(tet[1]);
+            for (int i = 0; i < output.numberoftetrahedra; ++i) {
+                int* tet = &output.tetrahedronlist[i * 4];
+
+                // All 4 faces of the tetrahedron
+                // Face 0: (v1, v2, v3) - opposite to v0
+                output_face_counts.push_back(3);
+                output_indices.push_back(tet[1]);
+                output_indices.push_back(tet[2]);
+                output_indices.push_back(tet[3]);
+                surface_markers.push_back(0.0f);  // Unknown if surface
+
+                // Face 1: (v0, v3, v2) - opposite to v1
+                output_face_counts.push_back(3);
+                output_indices.push_back(tet[0]);
+                output_indices.push_back(tet[3]);
+                output_indices.push_back(tet[2]);
+                surface_markers.push_back(0.0f);
+
+                // Face 2: (v0, v1, v3) - opposite to v2
+                output_face_counts.push_back(3);
+                output_indices.push_back(tet[0]);
+                output_indices.push_back(tet[1]);
+                output_indices.push_back(tet[3]);
+                surface_markers.push_back(0.0f);
+
+                // Face 3: (v0, v2, v1) - opposite to v3
+                output_face_counts.push_back(3);
+                output_indices.push_back(tet[0]);
+                output_indices.push_back(tet[2]);
+                output_indices.push_back(tet[1]);
+                surface_markers.push_back(0.0f);
+            }
         }
 
         // Set mesh data
         output_mesh->set_vertices(output_points);
         output_mesh->set_face_vertex_indices(output_indices);
         output_mesh->set_face_vertex_counts(output_face_counts);
+
+        // Add surface marker as face scalar quantity
+        output_mesh->add_face_scalar_quantity(
+            "surface_marker", surface_markers);
 
         // tetgenio destructors will clean up automatically
         return output_geometry;

@@ -18,7 +18,7 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
 
     std::string to_string() const override;
     GeometryComponentHandle copy(Geometry* operand) const override;
-    
+
     size_t hash() const override
     {
         size_t h = 0;
@@ -110,44 +110,7 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         return names;
     }
 
-    [[nodiscard]] std::vector<glm::vec3> get_vertex_color_quantity(
-        const std::string& name) const
-    {
-        auto it = vertex_color_quantities.find(name);
-        if (it != vertex_color_quantities.end()) {
-            return it->second;
-        }
-        return std::vector<glm::vec3>();
-    }
 
-    [[nodiscard]] std::vector<std::string> get_vertex_color_quantity_names()
-        const
-    {
-        std::vector<std::string> names;
-        for (const auto& pair : vertex_color_quantities) {
-            names.push_back(pair.first);
-        }
-        return names;
-    }
-
-    [[nodiscard]] std::vector<glm::vec3> get_face_color_quantity(
-        const std::string& name) const
-    {
-        auto it = face_color_quantities.find(name);
-        if (it != face_color_quantities.end()) {
-            return it->second;
-        }
-        return std::vector<glm::vec3>();
-    }
-
-    [[nodiscard]] std::vector<std::string> get_face_color_quantity_names() const
-    {
-        std::vector<std::string> names;
-        for (const auto& pair : face_color_quantities) {
-            names.push_back(pair.first);
-        }
-        return names;
-    }
 
     [[nodiscard]] std::vector<glm::vec3> get_vertex_vector_quantity(
         const std::string& name) const
@@ -297,17 +260,7 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         face_scalar_quantities = scalar;
     }
 
-    void set_vertex_color_quantities(
-        const std::map<std::string, std::vector<glm::vec3>>& color)
-    {
-        vertex_color_quantities = color;
-    }
 
-    void set_face_color_quantities(
-        const std::map<std::string, std::vector<glm::vec3>>& color)
-    {
-        face_color_quantities = color;
-    }
 
     void set_vertex_vector_quantities(
         const std::map<std::string, std::vector<glm::vec3>>& vector)
@@ -347,19 +300,7 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         face_scalar_quantities[name] = scalar;
     }
 
-    void add_vertex_color_quantity(
-        const std::string& name,
-        const std::vector<glm::vec3>& color)
-    {
-        vertex_color_quantities[name] = color;
-    }
 
-    void add_face_color_quantity(
-        const std::string& name,
-        const std::vector<glm::vec3>& color)
-    {
-        face_color_quantities[name] = color;
-    }
 
     void add_vertex_vector_quantity(
         const std::string& name,
@@ -406,18 +347,12 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
     // Edge quantities are not supported because the indexing is not clear
     std::map<std::string, std::vector<float>> vertex_scalar_quantities;
     std::map<std::string, std::vector<float>> face_scalar_quantities;
-    // std::vector<std::vector<float>> edge_scalar_quantities;
-    // std::vector<std::vector<float>> halfedge_scalar_quantities
-    std::map<std::string, std::vector<glm::vec3>> vertex_color_quantities;
-    std::map<std::string, std::vector<glm::vec3>> face_color_quantities;
     std::map<std::string, std::vector<glm::vec3>> vertex_vector_quantities;
     std::map<std::string, std::vector<glm::vec3>> face_vector_quantities;
     std::map<std::string, std::vector<glm::vec2>>
         face_corner_parameterization_quantities;
     std::map<std::string, std::vector<glm::vec2>>
         vertex_parameterization_quantities;
-    // std::vector<std::vector<glm::vec3>> misc_quantities_nodes;
-    // std::vector<std::vector<pxr::GfVec2i>> misc_quantities_edges;
 };
 
 RUZINO_NAMESPACE_CLOSE_SCOPE
