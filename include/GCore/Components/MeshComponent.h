@@ -110,8 +110,6 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         return names;
     }
 
-
-
     [[nodiscard]] std::vector<glm::vec3> get_vertex_vector_quantity(
         const std::string& name) const
     {
@@ -260,8 +258,6 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         face_scalar_quantities = scalar;
     }
 
-
-
     void set_vertex_vector_quantities(
         const std::map<std::string, std::vector<glm::vec3>>& vector)
     {
@@ -299,8 +295,6 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
     {
         face_scalar_quantities[name] = scalar;
     }
-
-
 
     void add_vertex_vector_quantity(
         const std::string& name,
