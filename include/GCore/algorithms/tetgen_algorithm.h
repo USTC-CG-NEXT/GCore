@@ -8,11 +8,15 @@ namespace geom_algorithm {
 
 /// Parameters for tetrahedral mesh generation
 struct TetgenParams {
-    float quality_ratio = 2.0f;      // Quality ratio constraint (1.0 - 10.0)
-    float max_volume = 1.0f;         // Maximum tetrahedron volume
-    bool refine = true;              // Enable mesh refinement
-    bool conforming_delaunay = true; // Use conforming Delaunay tetrahedralization
-    bool quiet = true;               // Suppress tetgen output
+    float quality_ratio = 2.0f;  // Quality ratio constraint (1.0 - 10.0)
+    float max_volume = 0.01f;    // Maximum tetrahedron volume (default reduced
+                                 // for better quality)
+    float min_dihedral_angle =
+        10.0f;           // Minimum dihedral angle in degrees (0 - 30)
+    bool refine = true;  // Enable mesh refinement
+    bool conforming_delaunay =
+        true;           // Use conforming Delaunay tetrahedralization
+    bool quiet = true;  // Suppress tetgen output
 };
 
 /// Generate tetrahedral mesh from a triangulated surface mesh using TetGen

@@ -1,6 +1,9 @@
 #include "GCore/algorithms/tetgen_algorithm.h"
 
+#include <iostream>
+
 #include "GCore/Components/MeshComponent.h"
+#include "spdlog/spdlog.h"
 #include "tetgen.h"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
@@ -91,9 +94,17 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
         behavior.quiet = params.quiet ? 1 : 0;
         behavior.facesout = 1;  // Output boundary faces
 
+        // Set minimum dihedral angle constraint for better quality tetrahedra
+        // mindihedral is always applied when quality mesh is enabled
+        behavior.mindihedral = params.min_dihedral_angle;
+
         if (params.conforming_delaunay) {
             behavior.cdt = 1;  // Conforming Delaunay
         }
+
+        // Additional quality improvements
+        behavior.varvolume = 0;  // Don't use variable volume constraints
+        behavior.diagnose = 0;   // Don't just diagnose, actually fix issues
 
         // Run TetGen
         tetrahedralize(&behavior, &input, &output);
@@ -101,6 +112,11 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
         if (output.numberoftetrahedra == 0) {
             throw std::runtime_error("TetGen failed to generate tetrahedra");
         }
+
+        spdlog::info(
+            "[TetGen] Generated {} tetrahedra from {} input faces",
+            output.numberoftetrahedra,
+            input.numberoffacets);
 
         // Create output geometry
         Geometry output_geometry;
@@ -187,6 +203,72 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
                 output_indices.push_back(tet[1]);
                 surface_markers.push_back(0.0f);
             }
+        }
+
+        // Validate tetrahedra quality
+        if (!params.quiet && output.numberoftetrahedra > 0) {
+            double min_volume = std::numeric_limits<double>::max();
+            double max_volume = 0.0;
+            double avg_volume = 0.0;
+            int degenerate_count = 0;
+            const double VOLUME_THRESHOLD = 1e-10;
+
+            for (int i = 0; i < output.numberoftetrahedra; ++i) {
+                int* tet = &output.tetrahedronlist[i * 4];
+
+                // Get vertices
+                glm::dvec3 v0(
+                    output.pointlist[tet[0] * 3 + 0],
+                    output.pointlist[tet[0] * 3 + 1],
+                    output.pointlist[tet[0] * 3 + 2]);
+                glm::dvec3 v1(
+                    output.pointlist[tet[1] * 3 + 0],
+                    output.pointlist[tet[1] * 3 + 1],
+                    output.pointlist[tet[1] * 3 + 2]);
+                glm::dvec3 v2(
+                    output.pointlist[tet[2] * 3 + 0],
+                    output.pointlist[tet[2] * 3 + 1],
+                    output.pointlist[tet[2] * 3 + 2]);
+                glm::dvec3 v3(
+                    output.pointlist[tet[3] * 3 + 0],
+                    output.pointlist[tet[3] * 3 + 1],
+                    output.pointlist[tet[3] * 3 + 2]);
+
+                // Calculate volume
+                glm::dvec3 e1 = v1 - v0;
+                glm::dvec3 e2 = v2 - v0;
+                glm::dvec3 e3 = v3 - v0;
+                double volume =
+                    std::abs(glm::dot(e1, glm::cross(e2, e3))) / 6.0;
+
+                min_volume = std::min(min_volume, volume);
+                max_volume = std::max(max_volume, volume);
+                avg_volume += volume;
+
+                if (volume < VOLUME_THRESHOLD) {
+                    degenerate_count++;
+                }
+            }
+
+            avg_volume /= output.numberoftetrahedra;
+
+            std::cout << "=== TetGen Quality Report ===" << std::endl;
+            std::cout << "Total tetrahedra: " << output.numberoftetrahedra
+                      << std::endl;
+            std::cout << "Volume statistics:" << std::endl;
+            std::cout << "  Min: " << min_volume << std::endl;
+            std::cout << "  Max: " << max_volume << std::endl;
+            std::cout << "  Avg: " << avg_volume << std::endl;
+            std::cout << "  Degenerate count (volume < " << VOLUME_THRESHOLD
+                      << "): " << degenerate_count << std::endl;
+
+            if (degenerate_count > 0) {
+                std::cout << "WARNING: Found " << degenerate_count
+                          << " degenerate tetrahedra! Consider adjusting "
+                             "TetGen parameters."
+                          << std::endl;
+            }
+            std::cout << "============================" << std::endl;
         }
 
         // Set mesh data
