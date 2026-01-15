@@ -995,18 +995,14 @@ Geometry create_subdivided_tetrahedron(int subdivisions, float size)
         tets = newTets;
     }
 
-    // Output ALL tetrahedral faces (not just surface)
-    // This is required for compute_volume_adjacency_gpu to work
+    // Output unique tetrahedral faces only (remove duplicates)
+    // This is required for compute_volume_adjacency_gpu to work correctly
     std::vector<int> faceVertexIndices;
     std::vector<int> faceVertexCounts;
 
-    faceVertexIndices.reserve(
-        tets.size() * 12);  // 4 faces × 3 vertices per tet
-    faceVertexCounts.reserve(tets.size() * 4);
-
-    // Track face occurrences to identify surface faces
-    // Surface faces appear once, interior faces appear twice
-    std::map<TriKey, int> faceOccurrences;
+    // Track face occurrences to deduplicate and identify surface faces
+    // Use map to store unique faces with their first occurrence data
+    std::map<TriKey, std::array<int, 3>> uniqueFaces;
 
     for (size_t tetIdx = 0; tetIdx < tets.size(); ++tetIdx) {
         const Tet& tet = tets[tetIdx];
@@ -1021,30 +1017,51 @@ Geometry create_subdivided_tetrahedron(int subdivisions, float size)
         };
 
         for (int f = 0; f < 4; ++f) {
-            faceVertexCounts.push_back(3);
-            faceVertexIndices.push_back(faces[f][0]);
-            faceVertexIndices.push_back(faces[f][1]);
-            faceVertexIndices.push_back(faces[f][2]);
+            TriKey key(faces[f][0], faces[f][1], faces[f][2]);
 
-            // Track face occurrence count
+            // Only add face if not seen before (deduplication)
+            if (uniqueFaces.find(key) == uniqueFaces.end()) {
+                uniqueFaces[key] = { faces[f][0], faces[f][1], faces[f][2] };
+            }
+        }
+    }
+
+    // Convert unique faces to output arrays
+    faceVertexIndices.reserve(uniqueFaces.size() * 3);
+    faceVertexCounts.reserve(uniqueFaces.size());
+
+    // Track face occurrences for surface marker (scan all tets again)
+    std::map<TriKey, int> faceOccurrences;
+    for (size_t tetIdx = 0; tetIdx < tets.size(); ++tetIdx) {
+        const Tet& tet = tets[tetIdx];
+        int faces[4][3] = { { tet.v[1], tet.v[2], tet.v[3] },
+                            { tet.v[0], tet.v[3], tet.v[2] },
+                            { tet.v[0], tet.v[1], tet.v[3] },
+                            { tet.v[0], tet.v[2], tet.v[1] } };
+        for (int f = 0; f < 4; ++f) {
             TriKey key(faces[f][0], faces[f][1], faces[f][2]);
             faceOccurrences[key]++;
         }
+    }
+
+    // Output unique faces
+    for (const auto& [key, verts] : uniqueFaces) {
+        faceVertexCounts.push_back(3);
+        faceVertexIndices.push_back(verts[0]);
+        faceVertexIndices.push_back(verts[1]);
+        faceVertexIndices.push_back(verts[2]);
     }
 
     // Create surface markers: 1.0 for surface faces, 0.0 for interior faces
     std::vector<float> surface_markers;
     surface_markers.reserve(faceVertexCounts.size());
 
-    for (size_t i = 0; i < faceVertexCounts.size(); ++i) {
-        int v0 = faceVertexIndices[i * 3 + 0];
-        int v1 = faceVertexIndices[i * 3 + 1];
-        int v2 = faceVertexIndices[i * 3 + 2];
-
-        TriKey key(v0, v1, v2);
+    size_t faceIdx = 0;
+    for (const auto& [key, verts] : uniqueFaces) {
         // Surface faces appear only once in the mesh
         float marker = (faceOccurrences[key] == 1) ? 1.0f : 0.0f;
         surface_markers.push_back(marker);
+        faceIdx++;
     }
 
     // Compute normals per face
@@ -1100,32 +1117,36 @@ Geometry create_double_tetrahedron(float size)
     std::vector<int> faceVertexIndices;
     std::vector<int> faceVertexCounts;
 
-    // Create a SINGLE regular tetrahedron centered at origin for perfect symmetry
-    // This ensures strictly vertical motion under gravity
+    // Create a SINGLE regular tetrahedron centered at origin for perfect
+    // symmetry This ensures strictly vertical motion under gravity
     float height = size * std::sqrt(2.0f / 3.0f);
     float radius = size / std::sqrt(3.0f);
-    
-    // Base triangle vertices (in xy-plane, z = -h/4 for center of mass at origin)
+
+    // Base triangle vertices (in xy-plane, z = -h/4 for center of mass at
+    // origin)
     float base_z = -height / 4.0f;
     points.push_back(glm::vec3(radius, 0.0f, base_z));
-    points.push_back(glm::vec3(-radius / 2.0f, radius * std::sqrt(3.0f) / 2.0f, base_z));
-    points.push_back(glm::vec3(-radius / 2.0f, -radius * std::sqrt(3.0f) / 2.0f, base_z));
-    
+    points.push_back(
+        glm::vec3(-radius / 2.0f, radius * std::sqrt(3.0f) / 2.0f, base_z));
+    points.push_back(
+        glm::vec3(-radius / 2.0f, -radius * std::sqrt(3.0f) / 2.0f, base_z));
+
     // Apex vertex (on z-axis, positioned for center of mass at origin)
     // For tetrahedron: CoM = (v0+v1+v2+v3)/4 should be at origin
     // base_z * 3 + apex_z = 0  =>  apex_z = -3*base_z = 3h/4
     float apex_z = 3.0f * height / 4.0f;
     points.push_back(glm::vec3(0.0f, 0.0f, apex_z));
-    
+
     // Define 4 faces with consistent outward-pointing normals
-    // Using right-hand rule: vertices ordered counter-clockwise when viewed from outside
+    // Using right-hand rule: vertices ordered counter-clockwise when viewed
+    // from outside
     int faces[4][3] = {
-        {0, 2, 1},  // Bottom face (base triangle, normal pointing down)
-        {0, 1, 3},  // Side face 1
-        {1, 2, 3},  // Side face 2
-        {2, 0, 3}   // Side face 3
+        { 0, 2, 1 },  // Bottom face (base triangle, normal pointing down)
+        { 0, 1, 3 },  // Side face 1
+        { 1, 2, 3 },  // Side face 2
+        { 2, 0, 3 }   // Side face 3
     };
-    
+
     for (int i = 0; i < 4; ++i) {
         faceVertexCounts.push_back(3);
         faceVertexIndices.push_back(faces[i][0]);
