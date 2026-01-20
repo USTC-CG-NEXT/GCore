@@ -36,6 +36,13 @@ Geometry GEOMETRY_API create_diamond(
 Geometry GEOMETRY_API
 create_trefoil(int resolution, float radius, float tube_radius);
 Geometry GEOMETRY_API create_cube(float width, float height, float depth);
+Geometry GEOMETRY_API create_cube2(
+    float minx,
+    float miny,
+    float minz,
+    float maxx,
+    float maxy,
+    float maxz);
 Geometry GEOMETRY_API create_box_grid(
     int resolution_x,
     int resolution_y,
@@ -44,9 +51,8 @@ Geometry GEOMETRY_API create_box_grid(
     float height,
     float depth,
     bool add_diagonal);
-Geometry GEOMETRY_API create_subdivided_tetrahedron(
-    int subdivisions,
-    float size);
+Geometry GEOMETRY_API
+create_subdivided_tetrahedron(int subdivisions, float size);
 Geometry GEOMETRY_API create_double_tetrahedron(float size);
 
 RUZINO_NAMESPACE_CLOSE_SCOPE

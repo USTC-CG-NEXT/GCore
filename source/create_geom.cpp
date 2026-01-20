@@ -765,6 +765,82 @@ Geometry create_cube(float width, float height, float depth)
     return geometry;
 }
 
+Geometry create_cube2(
+    float minx,
+    float miny,
+    float minz,
+    float maxx,
+    float maxy,
+    float maxz)
+{
+    Geometry geometry;
+    std::shared_ptr<MeshComponent> mesh =
+        std::make_shared<MeshComponent>(&geometry);
+    geometry.attach_component(mesh);
+
+    std::vector<glm::vec3> points;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec2> texcoord;
+    std::vector<int> faceVertexIndices;
+    std::vector<int> faceVertexCounts;
+
+    std::vector<glm::vec3> vertices = {
+        glm::vec3(minx, miny, minz),  // 0
+        glm::vec3(maxx, miny, minz),  // 1
+        glm::vec3(maxx, maxy, minz),  // 2
+        glm::vec3(minx, maxy, minz),  // 3
+        glm::vec3(minx, miny, maxz),  // 4
+        glm::vec3(maxx, miny, maxz),  // 5
+        glm::vec3(maxx, maxy, maxz),  // 6
+        glm::vec3(minx, maxy, maxz)   // 7
+    };
+
+    std::vector<glm::vec3> faceNormals = {
+        glm::vec3(0, 0, -1),  // Front
+        glm::vec3(0, 0, 1),   // Back
+        glm::vec3(-1, 0, 0),  // Left
+        glm::vec3(1, 0, 0),   // Right
+        glm::vec3(0, -1, 0),  // Bottom
+        glm::vec3(0, 1, 0)    // Top
+    };
+
+    int faces[6][4] = {
+        { 0, 1, 2, 3 },  // Front
+        { 7, 6, 5, 4 },  // Back
+        { 4, 0, 3, 7 },  // Left
+        { 1, 5, 6, 2 },  // Right
+        { 4, 5, 1, 0 },  // Bottom
+        { 3, 2, 6, 7 }   // Top
+    };
+
+    std::vector<glm::vec2> faceUVs = {
+        glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(1, 1), glm::vec2(0, 1)
+    };
+
+    for (int face = 0; face < 6; ++face) {
+        for (int vert = 0; vert < 4; ++vert) {
+            points.push_back(vertices[faces[face][vert]]);
+            normals.push_back(faceNormals[face]);
+            texcoord.push_back(faceUVs[vert]);
+        }
+
+        faceVertexCounts.push_back(4);
+        int baseIdx = face * 4;
+        faceVertexIndices.push_back(baseIdx);
+        faceVertexIndices.push_back(baseIdx + 1);
+        faceVertexIndices.push_back(baseIdx + 2);
+        faceVertexIndices.push_back(baseIdx + 3);
+    }
+
+    mesh->set_vertices(points);
+    mesh->set_normals(normals);
+    mesh->set_face_vertex_indices(faceVertexIndices);
+    mesh->set_face_vertex_counts(faceVertexCounts);
+    mesh->set_texcoords_array(texcoord);
+
+    return geometry;
+}
+
 Geometry create_box_grid(
     int resolution_x,
     int resolution_y,
