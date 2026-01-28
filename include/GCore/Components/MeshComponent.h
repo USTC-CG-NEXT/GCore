@@ -39,8 +39,14 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
     MeshUSDView get_usd_view();
     ConstMeshUSDView get_usd_view() const;
 #endif
+#if RUZINO_WITH_CUDA
+    MeshCUDAView get_cuda_view();
+    ConstMeshCUDAView get_cuda_view() const;
+#endif
+    MeshNVRHIView get_nvrhi_view(nvrhi::IDevice* device);
+    ConstMeshNVRHIView get_nvrhi_view(nvrhi::IDevice* device) const;
 
-    [[nodiscard]] std::vector<glm::vec3> get_vertices() const
+    [[nodiscard]] const std::vector<glm::vec3>& get_vertices() const
     {
         return vertices;
     }
@@ -55,29 +61,30 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         return faceVertexIndices;
     }
 
-    [[nodiscard]] std::vector<glm::vec3> get_normals() const
+    [[nodiscard]] const std::vector<glm::vec3>& get_normals() const
     {
         return normals;
     }
 
-    [[nodiscard]] std::vector<glm::vec3> get_display_color() const
+    [[nodiscard]] const std::vector<glm::vec3>& get_display_color() const
     {
         return displayColor;
     }
 
-    [[nodiscard]] std::vector<glm::vec2> get_texcoords_array() const
+    [[nodiscard]] const std::vector<glm::vec2>& get_texcoords_array() const
     {
         return texcoordsArray;
     }
 
-    [[nodiscard]] std::vector<float> get_vertex_scalar_quantity(
+    [[nodiscard]] const std::vector<float>& get_vertex_scalar_quantity(
         const std::string& name) const
     {
+        static const std::vector<float> empty;
         auto it = vertex_scalar_quantities.find(name);
         if (it != vertex_scalar_quantities.end()) {
             return it->second;
         }
-        return std::vector<float>();
+        return empty;
     }
 
     [[nodiscard]] std::vector<std::string> get_vertex_scalar_quantity_names()
@@ -90,14 +97,15 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         return names;
     }
 
-    [[nodiscard]] std::vector<float> get_face_scalar_quantity(
+    [[nodiscard]] const std::vector<float>& get_face_scalar_quantity(
         const std::string& name) const
     {
+        static const std::vector<float> empty;
         auto it = face_scalar_quantities.find(name);
         if (it != face_scalar_quantities.end()) {
             return it->second;
         }
-        return std::vector<float>();
+        return empty;
     }
 
     [[nodiscard]] std::vector<std::string> get_face_scalar_quantity_names()
@@ -110,14 +118,15 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         return names;
     }
 
-    [[nodiscard]] std::vector<glm::vec3> get_vertex_vector_quantity(
+    [[nodiscard]] const std::vector<glm::vec3>& get_vertex_vector_quantity(
         const std::string& name) const
     {
+        static const std::vector<glm::vec3> empty;
         auto it = vertex_vector_quantities.find(name);
         if (it != vertex_vector_quantities.end()) {
             return it->second;
         }
-        return std::vector<glm::vec3>();
+        return empty;
     }
 
     [[nodiscard]] std::vector<std::string> get_vertex_vector_quantity_names()
@@ -130,14 +139,15 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         return names;
     }
 
-    [[nodiscard]] std::vector<glm::vec3> get_face_vector_quantity(
+    [[nodiscard]] const std::vector<glm::vec3>& get_face_vector_quantity(
         const std::string& name) const
     {
+        static const std::vector<glm::vec3> empty;
         auto it = face_vector_quantities.find(name);
         if (it != face_vector_quantities.end()) {
             return it->second;
         }
-        return std::vector<glm::vec3>();
+        return empty;
     }
 
     [[nodiscard]] std::vector<std::string> get_face_vector_quantity_names()
@@ -150,14 +160,15 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         return names;
     }
 
-    [[nodiscard]] std::vector<glm::vec2>
+    [[nodiscard]] const std::vector<glm::vec2>&
     get_face_corner_parameterization_quantity(const std::string& name) const
     {
+        static const std::vector<glm::vec2> empty;
         auto it = face_corner_parameterization_quantities.find(name);
         if (it != face_corner_parameterization_quantities.end()) {
             return it->second;
         }
-        return std::vector<glm::vec2>();
+        return empty;
     }
 
     [[nodiscard]] std::vector<std::string>
@@ -170,14 +181,15 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         return names;
     }
 
-    [[nodiscard]] std::vector<glm::vec2> get_vertex_parameterization_quantity(
-        const std::string& name) const
+    [[nodiscard]] const std::vector<glm::vec2>&
+    get_vertex_parameterization_quantity(const std::string& name) const
     {
+        static const std::vector<glm::vec2> empty;
         auto it = vertex_parameterization_quantities.find(name);
         if (it != vertex_parameterization_quantities.end()) {
             return it->second;
         }
-        return std::vector<glm::vec2>();
+        return empty;
     }
 
     [[nodiscard]] std::vector<std::string>
@@ -347,6 +359,21 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         face_corner_parameterization_quantities;
     std::map<std::string, std::vector<glm::vec2>>
         vertex_parameterization_quantities;
+
+    // View lock mechanism
+    mutable bool has_active_view_ = false;
+
+    friend struct ConstMeshIGLView;
+    friend struct MeshIGLView;
+    friend struct ConstMeshUSDView;
+    friend struct MeshUSDView;
+    friend struct ConstMeshCUDAView;
+    friend struct MeshCUDAView;
+    friend struct ConstMeshNVRHIView;
+    friend struct MeshNVRHIView;
+
+    void acquire_view_lock() const;
+    void release_view_lock() const;
 };
 
 RUZINO_NAMESPACE_CLOSE_SCOPE

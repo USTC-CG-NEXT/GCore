@@ -1,12 +1,38 @@
 #include <GCore/Components/MeshViews.h>
 
+#include <set>
+#include <stdexcept>
+
 #include "GCore/Components/MeshComponent.h"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
 
+// View lock implementation
+void MeshComponent::acquire_view_lock() const
+{
+    if (has_active_view_) {
+        throw std::runtime_error(
+            "Cannot create multiple views of the same MeshComponent "
+            "simultaneously. "
+            "Please destroy the existing view before creating a new one.");
+    }
+    has_active_view_ = true;
+}
+
+void MeshComponent::release_view_lock() const
+{
+    has_active_view_ = false;
+}
+
 // ConstMeshIGLView Implementation
 ConstMeshIGLView::ConstMeshIGLView(const MeshComponent& mesh) : mesh_(mesh)
 {
+    mesh_.acquire_view_lock();
+}
+
+ConstMeshIGLView::~ConstMeshIGLView()
+{
+    mesh_.release_view_lock();
 }
 
 Eigen::MatrixXf ConstMeshIGLView::get_vertices() const
@@ -92,8 +118,6 @@ Eigen::MatrixXf ConstMeshIGLView::get_face_vector_quantity(
     return vec3f_array_to_matrix(mesh_.get_face_vector_quantity(name));
 }
 
-
-
 Eigen::MatrixXf ConstMeshIGLView::get_vertex_parameterization_quantity(
     const std::string& name) const
 {
@@ -162,6 +186,10 @@ Eigen::VectorXi ConstMeshIGLView::int_array_to_vector(
 MeshIGLView::MeshIGLView(MeshComponent& mesh)
     : ConstMeshIGLView(mesh),
       mutable_mesh_(mesh)
+{
+}
+
+MeshIGLView::~MeshIGLView()
 {
 }
 
@@ -309,6 +337,12 @@ ConstMeshIGLView MeshComponent::get_igl_view() const
 // ConstMeshUSDView Implementation
 ConstMeshUSDView::ConstMeshUSDView(const MeshComponent& mesh) : mesh_(mesh)
 {
+    mesh_.acquire_view_lock();
+}
+
+ConstMeshUSDView::~ConstMeshUSDView()
+{
+    mesh_.release_view_lock();
 }
 
 pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::get_vertices() const
@@ -385,9 +419,11 @@ ConstMeshUSDView::get_face_corner_parameterization_quantity(
 pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::vec3f_array_to_vt_array(
     const std::vector<glm::vec3>& array)
 {
-    // glm::vec3 and pxr::GfVec3f have compatible memory layout (both are 3 floats)
-    static_assert(sizeof(glm::vec3) == sizeof(pxr::GfVec3f), 
-                  "glm::vec3 and pxr::GfVec3f must have the same size");
+    // glm::vec3 and pxr::GfVec3f have compatible memory layout (both are 3
+    // floats)
+    static_assert(
+        sizeof(glm::vec3) == sizeof(pxr::GfVec3f),
+        "glm::vec3 and pxr::GfVec3f must have the same size");
     return pxr::VtArray<pxr::GfVec3f>(
         reinterpret_cast<const pxr::GfVec3f*>(array.data()),
         reinterpret_cast<const pxr::GfVec3f*>(array.data() + array.size()));
@@ -396,9 +432,11 @@ pxr::VtArray<pxr::GfVec3f> ConstMeshUSDView::vec3f_array_to_vt_array(
 pxr::VtArray<pxr::GfVec2f> ConstMeshUSDView::vec2f_array_to_vt_array(
     const std::vector<glm::vec2>& array)
 {
-    // glm::vec2 and pxr::GfVec2f have compatible memory layout (both are 2 floats)
-    static_assert(sizeof(glm::vec2) == sizeof(pxr::GfVec2f),
-                  "glm::vec2 and pxr::GfVec2f must have the same size");
+    // glm::vec2 and pxr::GfVec2f have compatible memory layout (both are 2
+    // floats)
+    static_assert(
+        sizeof(glm::vec2) == sizeof(pxr::GfVec2f),
+        "glm::vec2 and pxr::GfVec2f must have the same size");
     return pxr::VtArray<pxr::GfVec2f>(
         reinterpret_cast<const pxr::GfVec2f*>(array.data()),
         reinterpret_cast<const pxr::GfVec2f*>(array.data() + array.size()));
@@ -420,6 +458,10 @@ pxr::VtArray<int> ConstMeshUSDView::int_array_to_vt_array(
 MeshUSDView::MeshUSDView(MeshComponent& mesh)
     : ConstMeshUSDView(mesh),
       mutable_mesh_(mesh)
+{
+}
+
+MeshUSDView::~MeshUSDView()
 {
 }
 
@@ -550,5 +592,631 @@ ConstMeshUSDView MeshComponent::get_usd_view() const
 }
 
 #endif
+
+#if RUZINO_WITH_CUDA
+// ===== CUDA View Implementation =====
+
+ConstMeshCUDAView::ConstMeshCUDAView(const MeshComponent& mesh) : mesh_(mesh)
+{
+    mesh_.acquire_view_lock();
+}
+
+ConstMeshCUDAView::~ConstMeshCUDAView()
+{
+    mesh_.release_view_lock();
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_or_create_buffer(
+    const std::string& key,
+    const void* data,
+    size_t element_count,
+    size_t element_size) const
+{
+    auto it = cuda_buffers_.find(key);
+    if (it != cuda_buffers_.end()) {
+        return it->second;
+    }
+
+    // Lazy create buffer
+    cuda::CUDALinearBufferDesc desc(element_count, element_size);
+    auto buffer =
+        cuda::create_cuda_linear_buffer(desc, const_cast<void*>(data));
+    cuda_buffers_[key] = buffer;
+    return buffer;
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_vertices() const
+{
+    auto vertices = mesh_.get_vertices();
+    return get_or_create_buffer(
+        "vertices", vertices.data(), vertices.size(), sizeof(glm::vec3));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_face_vertex_counts() const
+{
+    auto counts = mesh_.get_face_vertex_counts();
+    return get_or_create_buffer(
+        "face_vertex_counts", counts.data(), counts.size(), sizeof(int));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_face_vertex_indices() const
+{
+    auto indices = mesh_.get_face_vertex_indices();
+    return get_or_create_buffer(
+        "face_vertex_indices", indices.data(), indices.size(), sizeof(int));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_normals() const
+{
+    auto normals = mesh_.get_normals();
+    return get_or_create_buffer(
+        "normals", normals.data(), normals.size(), sizeof(glm::vec3));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_uv_coordinates() const
+{
+    auto uvs = mesh_.get_texcoords_array();
+    return get_or_create_buffer(
+        "uv_coordinates", uvs.data(), uvs.size(), sizeof(glm::vec2));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_display_colors() const
+{
+    auto colors = mesh_.get_display_color();
+    return get_or_create_buffer(
+        "display_colors", colors.data(), colors.size(), sizeof(glm::vec3));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_vertex_scalar_quantity(
+    const std::string& name) const
+{
+    auto values = mesh_.get_vertex_scalar_quantity(name);
+    return get_or_create_buffer(
+        "vertex_scalar_" + name, values.data(), values.size(), sizeof(float));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_face_scalar_quantity(
+    const std::string& name) const
+{
+    auto values = mesh_.get_face_scalar_quantity(name);
+    return get_or_create_buffer(
+        "face_scalar_" + name, values.data(), values.size(), sizeof(float));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_vertex_vector_quantity(
+    const std::string& name) const
+{
+    auto vectors = mesh_.get_vertex_vector_quantity(name);
+    return get_or_create_buffer(
+        "vertex_vector_" + name,
+        vectors.data(),
+        vectors.size(),
+        sizeof(glm::vec3));
+}
+
+cuda::CUDALinearBufferHandle ConstMeshCUDAView::get_face_vector_quantity(
+    const std::string& name) const
+{
+    auto vectors = mesh_.get_face_vector_quantity(name);
+    return get_or_create_buffer(
+        "face_vector_" + name,
+        vectors.data(),
+        vectors.size(),
+        sizeof(glm::vec3));
+}
+
+cuda::CUDALinearBufferHandle
+ConstMeshCUDAView::get_vertex_parameterization_quantity(
+    const std::string& name) const
+{
+    auto params = mesh_.get_vertex_parameterization_quantity(name);
+    return get_or_create_buffer(
+        "vertex_param_" + name,
+        params.data(),
+        params.size(),
+        sizeof(glm::vec2));
+}
+
+cuda::CUDALinearBufferHandle
+ConstMeshCUDAView::get_face_corner_parameterization_quantity(
+    const std::string& name) const
+{
+    auto params = mesh_.get_face_corner_parameterization_quantity(name);
+    return get_or_create_buffer(
+        "face_corner_param_" + name,
+        params.data(),
+        params.size(),
+        sizeof(glm::vec2));
+}
+
+MeshCUDAView::MeshCUDAView(MeshComponent& mesh)
+    : ConstMeshCUDAView(mesh),
+      mutable_mesh_(mesh)
+{
+}
+
+MeshCUDAView::~MeshCUDAView()
+{
+    // RAII: sync all modified buffers back to CPU
+    sync_all_to_cpu();
+}
+
+void MeshCUDAView::sync_buffer_to_cpu(const std::string& buffer_name)
+{
+    auto it = cuda_buffers_.find(buffer_name);
+    if (it == cuda_buffers_.end()) {
+        return;
+    }
+
+    auto buffer = it->second;
+
+    // Sync based on buffer type
+    if (buffer_name == "vertices") {
+        mutable_mesh_.set_vertices(buffer->get_host_vector<glm::vec3>());
+    }
+    else if (buffer_name == "face_vertex_counts") {
+        mutable_mesh_.set_face_vertex_counts(buffer->get_host_vector<int>());
+    }
+    else if (buffer_name == "face_vertex_indices") {
+        mutable_mesh_.set_face_vertex_indices(buffer->get_host_vector<int>());
+    }
+    else if (buffer_name == "normals") {
+        mutable_mesh_.set_normals(buffer->get_host_vector<glm::vec3>());
+    }
+    else if (buffer_name == "uv_coordinates") {
+        mutable_mesh_.set_texcoords_array(buffer->get_host_vector<glm::vec2>());
+    }
+    else if (buffer_name == "display_colors") {
+        mutable_mesh_.set_display_color(buffer->get_host_vector<glm::vec3>());
+    }
+    else if (buffer_name.substr(0, 14) == "vertex_scalar_") {
+        auto name = buffer_name.substr(14);
+        mutable_mesh_.add_vertex_scalar_quantity(
+            name, buffer->get_host_vector<float>());
+    }
+    else if (buffer_name.substr(0, 12) == "face_scalar_") {
+        auto name = buffer_name.substr(12);
+        mutable_mesh_.add_face_scalar_quantity(
+            name, buffer->get_host_vector<float>());
+    }
+    else if (buffer_name.substr(0, 14) == "vertex_vector_") {
+        auto name = buffer_name.substr(14);
+        mutable_mesh_.add_vertex_vector_quantity(
+            name, buffer->get_host_vector<glm::vec3>());
+    }
+    else if (buffer_name.substr(0, 12) == "face_vector_") {
+        auto name = buffer_name.substr(12);
+        mutable_mesh_.add_face_vector_quantity(
+            name, buffer->get_host_vector<glm::vec3>());
+    }
+    else if (buffer_name.substr(0, 13) == "vertex_param_") {
+        auto name = buffer_name.substr(13);
+        mutable_mesh_.add_vertex_parameterization_quantity(
+            name, buffer->get_host_vector<glm::vec2>());
+    }
+    else if (buffer_name.substr(0, 18) == "face_corner_param_") {
+        auto name = buffer_name.substr(18);
+        mutable_mesh_.add_face_corner_parameterization_quantity(
+            name, buffer->get_host_vector<glm::vec2>());
+    }
+}
+
+void MeshCUDAView::sync_all_to_cpu()
+{
+    for (const auto& buffer_name : modified_buffers_) {
+        sync_buffer_to_cpu(buffer_name);
+    }
+    modified_buffers_.clear();
+}
+
+void MeshCUDAView::set_vertices(cuda::CUDALinearBufferHandle vertices)
+{
+    cuda_buffers_["vertices"] = vertices;
+    modified_buffers_.insert("vertices");
+}
+
+void MeshCUDAView::set_face_topology(
+    cuda::CUDALinearBufferHandle face_vertex_counts,
+    cuda::CUDALinearBufferHandle face_vertex_indices)
+{
+    cuda_buffers_["face_vertex_counts"] = face_vertex_counts;
+    cuda_buffers_["face_vertex_indices"] = face_vertex_indices;
+    modified_buffers_.insert("face_vertex_counts");
+    modified_buffers_.insert("face_vertex_indices");
+}
+
+void MeshCUDAView::set_normals(cuda::CUDALinearBufferHandle normals)
+{
+    cuda_buffers_["normals"] = normals;
+    modified_buffers_.insert("normals");
+}
+
+void MeshCUDAView::set_uv_coordinates(cuda::CUDALinearBufferHandle uv_coords)
+{
+    cuda_buffers_["uv_coordinates"] = uv_coords;
+    modified_buffers_.insert("uv_coordinates");
+}
+
+void MeshCUDAView::set_display_colors(cuda::CUDALinearBufferHandle colors)
+{
+    cuda_buffers_["display_colors"] = colors;
+    modified_buffers_.insert("display_colors");
+}
+
+void MeshCUDAView::set_vertex_scalar_quantity(
+    const std::string& name,
+    cuda::CUDALinearBufferHandle values)
+{
+    auto key = "vertex_scalar_" + name;
+    cuda_buffers_[key] = values;
+    modified_buffers_.insert(key);
+}
+
+void MeshCUDAView::set_face_scalar_quantity(
+    const std::string& name,
+    cuda::CUDALinearBufferHandle values)
+{
+    auto key = "face_scalar_" + name;
+    cuda_buffers_[key] = values;
+    modified_buffers_.insert(key);
+}
+
+void MeshCUDAView::set_vertex_vector_quantity(
+    const std::string& name,
+    cuda::CUDALinearBufferHandle vectors)
+{
+    auto key = "vertex_vector_" + name;
+    cuda_buffers_[key] = vectors;
+    modified_buffers_.insert(key);
+}
+
+void MeshCUDAView::set_face_vector_quantity(
+    const std::string& name,
+    cuda::CUDALinearBufferHandle vectors)
+{
+    auto key = "face_vector_" + name;
+    cuda_buffers_[key] = vectors;
+    modified_buffers_.insert(key);
+}
+
+void MeshCUDAView::set_vertex_parameterization_quantity(
+    const std::string& name,
+    cuda::CUDALinearBufferHandle params)
+{
+    auto key = "vertex_param_" + name;
+    cuda_buffers_[key] = params;
+    modified_buffers_.insert(key);
+}
+
+void MeshCUDAView::set_face_corner_parameterization_quantity(
+    const std::string& name,
+    cuda::CUDALinearBufferHandle params)
+{
+    auto key = "face_corner_param_" + name;
+    cuda_buffers_[key] = params;
+    modified_buffers_.insert(key);
+}
+
+MeshCUDAView MeshComponent::get_cuda_view()
+{
+    return MeshCUDAView(*this);
+}
+
+ConstMeshCUDAView MeshComponent::get_cuda_view() const
+{
+    return ConstMeshCUDAView(*this);
+}
+#endif
+
+// ===== NVRHI View Implementation =====
+
+ConstMeshNVRHIView::ConstMeshNVRHIView(
+    const MeshComponent& mesh,
+    nvrhi::IDevice* device)
+    : mesh_(mesh),
+      device_(device)
+{
+    mesh_.acquire_view_lock();
+}
+
+ConstMeshNVRHIView::~ConstMeshNVRHIView()
+{
+    mesh_.release_view_lock();
+}
+
+nvrhi::BufferHandle ConstMeshNVRHIView::get_or_create_buffer(
+    const std::string& key,
+    const void* data,
+    size_t element_count,
+    size_t element_size,
+    nvrhi::ICommandList* commandList) const
+{
+    auto it = nvrhi_buffers_.find(key);
+    if (it != nvrhi_buffers_.end()) {
+        return it->second;
+    }
+
+    // Lazy create buffer
+    nvrhi::BufferDesc desc;
+    desc.byteSize = element_count * element_size;
+    desc.debugName = key;
+    desc.initialState = nvrhi::ResourceStates::ShaderResource;
+    desc.keepInitialState = true;
+    desc.canHaveUAVs = true;
+    desc.isVertexBuffer =
+        (key == "vertices" || key == "normals" || key == "uv_coordinates" ||
+         key == "display_colors");
+    desc.isIndexBuffer = (key == "face_vertex_indices");
+
+    auto buffer = device_->createBuffer(desc);
+
+    // Upload initial data if commandList is provided
+    if (commandList && data && element_count > 0) {
+        commandList->writeBuffer(buffer, data, element_count * element_size);
+    }
+
+    nvrhi_buffers_[key] = buffer;
+    return buffer;
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_vertices(
+    nvrhi::ICommandList* commandList) const
+{
+    auto vertices = mesh_.get_vertices();
+    return get_or_create_buffer(
+        "vertices",
+        vertices.data(),
+        vertices.size(),
+        sizeof(glm::vec3),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_face_vertex_counts(
+    nvrhi::ICommandList* commandList) const
+{
+    auto counts = mesh_.get_face_vertex_counts();
+    return get_or_create_buffer(
+        "face_vertex_counts",
+        counts.data(),
+        counts.size(),
+        sizeof(int),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_face_vertex_indices(
+    nvrhi::ICommandList* commandList) const
+{
+    auto indices = mesh_.get_face_vertex_indices();
+    return get_or_create_buffer(
+        "face_vertex_indices",
+        indices.data(),
+        indices.size(),
+        sizeof(int),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_normals(
+    nvrhi::ICommandList* commandList) const
+{
+    auto normals = mesh_.get_normals();
+    return get_or_create_buffer(
+        "normals",
+        normals.data(),
+        normals.size(),
+        sizeof(glm::vec3),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_uv_coordinates(
+    nvrhi::ICommandList* commandList) const
+{
+    auto uvs = mesh_.get_texcoords_array();
+    return get_or_create_buffer(
+        "uv_coordinates",
+        uvs.data(),
+        uvs.size(),
+        sizeof(glm::vec2),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_display_colors(
+    nvrhi::ICommandList* commandList) const
+{
+    auto colors = mesh_.get_display_color();
+    return get_or_create_buffer(
+        "display_colors",
+        colors.data(),
+        colors.size(),
+        sizeof(glm::vec3),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_vertex_scalar_quantity(
+    const std::string& name,
+    nvrhi::ICommandList* commandList) const
+{
+    auto values = mesh_.get_vertex_scalar_quantity(name);
+    return get_or_create_buffer(
+        "vertex_scalar_" + name,
+        values.data(),
+        values.size(),
+        sizeof(float),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_face_scalar_quantity(
+    const std::string& name,
+    nvrhi::ICommandList* commandList) const
+{
+    auto values = mesh_.get_face_scalar_quantity(name);
+    return get_or_create_buffer(
+        "face_scalar_" + name,
+        values.data(),
+        values.size(),
+        sizeof(float),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_vertex_vector_quantity(
+    const std::string& name,
+    nvrhi::ICommandList* commandList) const
+{
+    auto vectors = mesh_.get_vertex_vector_quantity(name);
+    return get_or_create_buffer(
+        "vertex_vector_" + name,
+        vectors.data(),
+        vectors.size(),
+        sizeof(glm::vec3),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_face_vector_quantity(
+    const std::string& name,
+    nvrhi::ICommandList* commandList) const
+{
+    auto vectors = mesh_.get_face_vector_quantity(name);
+    return get_or_create_buffer(
+        "face_vector_" + name,
+        vectors.data(),
+        vectors.size(),
+        sizeof(glm::vec3),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_vertex_parameterization_quantity(
+    const std::string& name,
+    nvrhi::ICommandList* commandList) const
+{
+    auto params = mesh_.get_vertex_parameterization_quantity(name);
+    return get_or_create_buffer(
+        "vertex_param_" + name,
+        params.data(),
+        params.size(),
+        sizeof(glm::vec2),
+        commandList);
+}
+
+nvrhi::IBuffer* ConstMeshNVRHIView::get_face_corner_parameterization_quantity(
+    const std::string& name,
+    nvrhi::ICommandList* commandList) const
+{
+    auto params = mesh_.get_face_corner_parameterization_quantity(name);
+    return get_or_create_buffer(
+        "face_corner_param_" + name,
+        params.data(),
+        params.size(),
+        sizeof(glm::vec2),
+        commandList);
+}
+
+MeshNVRHIView::MeshNVRHIView(MeshComponent& mesh, nvrhi::IDevice* device)
+    : ConstMeshNVRHIView(mesh, device),
+      mutable_mesh_(mesh)
+{
+}
+
+MeshNVRHIView::~MeshNVRHIView()
+{
+    // Just clear tracking, no automatic sync
+    // User should manually copy data back if needed using staging buffers
+}
+
+void MeshNVRHIView::set_vertices(nvrhi::IBuffer* vertices)
+{
+    nvrhi_buffers_["vertices"] = vertices;
+    modified_buffers_.insert("vertices");
+}
+
+void MeshNVRHIView::set_face_topology(
+    nvrhi::IBuffer* face_vertex_counts,
+    nvrhi::IBuffer* face_vertex_indices)
+{
+    nvrhi_buffers_["face_vertex_counts"] = face_vertex_counts;
+    nvrhi_buffers_["face_vertex_indices"] = face_vertex_indices;
+    modified_buffers_.insert("face_vertex_counts");
+    modified_buffers_.insert("face_vertex_indices");
+}
+
+void MeshNVRHIView::set_normals(nvrhi::IBuffer* normals)
+{
+    nvrhi_buffers_["normals"] = normals;
+    modified_buffers_.insert("normals");
+}
+
+void MeshNVRHIView::set_uv_coordinates(nvrhi::IBuffer* uv_coords)
+{
+    nvrhi_buffers_["uv_coordinates"] = uv_coords;
+    modified_buffers_.insert("uv_coordinates");
+}
+
+void MeshNVRHIView::set_display_colors(nvrhi::IBuffer* colors)
+{
+    nvrhi_buffers_["display_colors"] = colors;
+    modified_buffers_.insert("display_colors");
+}
+
+void MeshNVRHIView::set_vertex_scalar_quantity(
+    const std::string& name,
+    nvrhi::IBuffer* values)
+{
+    auto key = "vertex_scalar_" + name;
+    nvrhi_buffers_[key] = values;
+    modified_buffers_.insert(key);
+}
+
+void MeshNVRHIView::set_face_scalar_quantity(
+    const std::string& name,
+    nvrhi::IBuffer* values)
+{
+    auto key = "face_scalar_" + name;
+    nvrhi_buffers_[key] = values;
+    modified_buffers_.insert(key);
+}
+
+void MeshNVRHIView::set_vertex_vector_quantity(
+    const std::string& name,
+    nvrhi::IBuffer* vectors)
+{
+    auto key = "vertex_vector_" + name;
+    nvrhi_buffers_[key] = vectors;
+    modified_buffers_.insert(key);
+}
+
+void MeshNVRHIView::set_face_vector_quantity(
+    const std::string& name,
+    nvrhi::IBuffer* vectors)
+{
+    auto key = "face_vector_" + name;
+    nvrhi_buffers_[key] = vectors;
+    modified_buffers_.insert(key);
+}
+
+void MeshNVRHIView::set_vertex_parameterization_quantity(
+    const std::string& name,
+    nvrhi::IBuffer* params)
+{
+    auto key = "vertex_param_" + name;
+    nvrhi_buffers_[key] = params;
+    modified_buffers_.insert(key);
+}
+
+void MeshNVRHIView::set_face_corner_parameterization_quantity(
+    const std::string& name,
+    nvrhi::IBuffer* params)
+{
+    auto key = "face_corner_param_" + name;
+    nvrhi_buffers_[key] = params;
+    modified_buffers_.insert(key);
+}
+
+MeshNVRHIView MeshComponent::get_nvrhi_view(nvrhi::IDevice* device)
+{
+    return MeshNVRHIView(*this, device);
+}
+
+ConstMeshNVRHIView MeshComponent::get_nvrhi_view(nvrhi::IDevice* device) const
+{
+    return ConstMeshNVRHIView(*this, device);
+}
 
 RUZINO_NAMESPACE_CLOSE_SCOPE
