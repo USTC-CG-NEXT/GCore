@@ -732,10 +732,6 @@ NB_MODULE(geometry_py, m)
     // ===== MeshViews for efficient data access =====
 
 #if RUZINO_WITH_CUDA
-    // Bind CUDA buffer handle (opaque type, just for passing to helper
-    // functions)
-    nb::class_<Ruzino::cuda::ICUDALinearBuffer>(m, "CUDALinearBuffer");
-
     // CUDA View - PyTorch CUDA tensor interface (readable and writable)
     nb::class_<MeshCUDAView>(m, "MeshCUDAView")
         // Get methods return tensors that can be modified in-place
@@ -811,78 +807,106 @@ NB_MODULE(geometry_py, m)
             nb::rv_policy::reference,
             "Get texcoords as PyTorch CUDA tensor (zero-copy, modifiable "
             "in-place)")
-        // Internal buffer access (for advanced use)
-        .def(
-            "get_vertices_buffer",
-            [](MeshCUDAView& self) { return self.get_vertices().Get(); },
-            nb::rv_policy::reference)
-        .def(
-            "get_normals_buffer",
-            [](MeshCUDAView& self) { return self.get_normals().Get(); },
-            nb::rv_policy::reference)
-        .def(
-            "get_display_colors_buffer",
-            [](MeshCUDAView& self) { return self.get_display_colors().Get(); },
-            nb::rv_policy::reference)
-        .def(
-            "get_face_vertex_counts_buffer",
-            [](MeshCUDAView& self) {
-                return self.get_face_vertex_counts().Get();
-            },
-            nb::rv_policy::reference)
-        .def(
-            "get_face_vertex_indices_buffer",
-            [](MeshCUDAView& self) {
-                return self.get_face_vertex_indices().Get();
-            },
-            nb::rv_policy::reference)
-        .def(
-            "get_uv_coordinates_buffer",
-            [](MeshCUDAView& self) { return self.get_uv_coordinates().Get(); },
-            nb::rv_policy::reference)
+        // Quantity getters - return PyTorch CUDA tensors
         .def(
             "get_vertex_scalar_quantity",
-            [](MeshCUDAView& self, const std::string& name) {
-                return self.get_vertex_scalar_quantity(name).Get();
+            [](MeshCUDAView& self, const std::string& name)
+                -> nb::ndarray<nb::pytorch, float, nb::device::cuda> {
+                auto buffer = self.get_vertex_scalar_quantity(name);
+                size_t n = buffer->getDesc().element_count;
+                size_t shape[1] = { n };
+                return nb::ndarray<nb::pytorch, float, nb::device::cuda>(
+                    reinterpret_cast<float*>(buffer->get_device_ptr()),
+                    1,
+                    shape,
+                    nb::handle());
             },
             nb::arg("name"),
-            nb::rv_policy::reference)
+            nb::rv_policy::reference,
+            "Get vertex scalar quantity as PyTorch CUDA tensor (zero-copy)")
         .def(
             "get_face_scalar_quantity",
-            [](MeshCUDAView& self, const std::string& name) {
-                return self.get_face_scalar_quantity(name).Get();
+            [](MeshCUDAView& self, const std::string& name)
+                -> nb::ndarray<nb::pytorch, float, nb::device::cuda> {
+                auto buffer = self.get_face_scalar_quantity(name);
+                size_t n = buffer->getDesc().element_count;
+                size_t shape[1] = { n };
+                return nb::ndarray<nb::pytorch, float, nb::device::cuda>(
+                    reinterpret_cast<float*>(buffer->get_device_ptr()),
+                    1,
+                    shape,
+                    nb::handle());
             },
             nb::arg("name"),
-            nb::rv_policy::reference)
+            nb::rv_policy::reference,
+            "Get face scalar quantity as PyTorch CUDA tensor (zero-copy)")
         .def(
             "get_vertex_vector_quantity",
-            [](MeshCUDAView& self, const std::string& name) {
-                return self.get_vertex_vector_quantity(name).Get();
+            [](MeshCUDAView& self, const std::string& name)
+                -> nb::ndarray<nb::pytorch, float, nb::device::cuda> {
+                auto buffer = self.get_vertex_vector_quantity(name);
+                size_t n = buffer->getDesc().element_count;
+                size_t shape[2] = { n, 3 };
+                return nb::ndarray<nb::pytorch, float, nb::device::cuda>(
+                    reinterpret_cast<float*>(buffer->get_device_ptr()),
+                    2,
+                    shape,
+                    nb::handle());
             },
             nb::arg("name"),
-            nb::rv_policy::reference)
+            nb::rv_policy::reference,
+            "Get vertex vector quantity as PyTorch CUDA tensor (zero-copy)")
         .def(
             "get_face_vector_quantity",
-            [](MeshCUDAView& self, const std::string& name) {
-                return self.get_face_vector_quantity(name).Get();
+            [](MeshCUDAView& self, const std::string& name)
+                -> nb::ndarray<nb::pytorch, float, nb::device::cuda> {
+                auto buffer = self.get_face_vector_quantity(name);
+                size_t n = buffer->getDesc().element_count;
+                size_t shape[2] = { n, 3 };
+                return nb::ndarray<nb::pytorch, float, nb::device::cuda>(
+                    reinterpret_cast<float*>(buffer->get_device_ptr()),
+                    2,
+                    shape,
+                    nb::handle());
             },
             nb::arg("name"),
-            nb::rv_policy::reference)
+            nb::rv_policy::reference,
+            "Get face vector quantity as PyTorch CUDA tensor (zero-copy)")
         .def(
             "get_vertex_parameterization_quantity",
-            [](MeshCUDAView& self, const std::string& name) {
-                return self.get_vertex_parameterization_quantity(name).Get();
+            [](MeshCUDAView& self, const std::string& name)
+                -> nb::ndarray<nb::pytorch, float, nb::device::cuda> {
+                auto buffer = self.get_vertex_parameterization_quantity(name);
+                size_t n = buffer->getDesc().element_count;
+                size_t shape[2] = { n, 2 };
+                return nb::ndarray<nb::pytorch, float, nb::device::cuda>(
+                    reinterpret_cast<float*>(buffer->get_device_ptr()),
+                    2,
+                    shape,
+                    nb::handle());
             },
             nb::arg("name"),
-            nb::rv_policy::reference)
+            nb::rv_policy::reference,
+            "Get vertex parameterization quantity as PyTorch CUDA tensor "
+            "(zero-copy)")
         .def(
             "get_face_corner_parameterization_quantity",
-            [](MeshCUDAView& self, const std::string& name) {
-                return self.get_face_corner_parameterization_quantity(name)
-                    .Get();
+            [](MeshCUDAView& self, const std::string& name)
+                -> nb::ndarray<nb::pytorch, float, nb::device::cuda> {
+                auto buffer =
+                    self.get_face_corner_parameterization_quantity(name);
+                size_t n = buffer->getDesc().element_count;
+                size_t shape[2] = { n, 2 };
+                return nb::ndarray<nb::pytorch, float, nb::device::cuda>(
+                    reinterpret_cast<float*>(buffer->get_device_ptr()),
+                    2,
+                    shape,
+                    nb::handle());
             },
             nb::arg("name"),
-            nb::rv_policy::reference)
+            nb::rv_policy::reference,
+            "Get face corner parameterization quantity as PyTorch CUDA tensor "
+            "(zero-copy)")
         // Set methods (optional - can also modify tensors in-place)
         .def(
             "set_vertices",
@@ -992,57 +1016,137 @@ NB_MODULE(geometry_py, m)
                 self.set_face_topology(counts, buffer);
             },
             "Set face vertex indices from PyTorch CUDA tensor")
-        // Internal buffer-based methods
-        .def("set_vertices_buffer", &MeshCUDAView::set_vertices)
-        .def("set_normals_buffer", &MeshCUDAView::set_normals)
-        .def("set_display_colors_buffer", &MeshCUDAView::set_display_colors)
-        .def("set_uv_coordinates_buffer", &MeshCUDAView::set_uv_coordinates)
-        .def("set_face_topology", &MeshCUDAView::set_face_topology)
+        // Quantity methods - all accept PyTorch CUDA tensors
         .def(
-            "set_vertex_scalar_quantity",
-            &MeshCUDAView::set_vertex_scalar_quantity)
+            "add_vertex_scalar_quantity",
+            [](MeshCUDAView& self,
+               const std::string& name,
+               nb::ndarray<nb::pytorch, float, nb::device::cuda> arr) {
+                if (arr.ndim() != 1) {
+                    throw std::runtime_error("Expected 1D tensor");
+                }
+                size_t n = arr.shape(0);
+                auto buffer = Ruzino::cuda::create_cuda_linear_buffer<float>(n);
+                void* dst = reinterpret_cast<void*>(buffer->get_device_ptr());
+                cudaMemcpy(
+                    dst,
+                    arr.data(),
+                    n * sizeof(float),
+                    cudaMemcpyDeviceToDevice);
+                self.set_vertex_scalar_quantity(name, buffer);
+            },
+            nb::arg("name"),
+            nb::arg("data"),
+            "Add vertex scalar quantity from PyTorch CUDA tensor")
         .def(
-            "set_face_scalar_quantity", &MeshCUDAView::set_face_scalar_quantity)
+            "add_face_scalar_quantity",
+            [](MeshCUDAView& self,
+               const std::string& name,
+               nb::ndarray<nb::pytorch, float, nb::device::cuda> arr) {
+                if (arr.ndim() != 1) {
+                    throw std::runtime_error("Expected 1D tensor");
+                }
+                size_t n = arr.shape(0);
+                auto buffer = Ruzino::cuda::create_cuda_linear_buffer<float>(n);
+                void* dst = reinterpret_cast<void*>(buffer->get_device_ptr());
+                cudaMemcpy(
+                    dst,
+                    arr.data(),
+                    n * sizeof(float),
+                    cudaMemcpyDeviceToDevice);
+                self.set_face_scalar_quantity(name, buffer);
+            },
+            nb::arg("name"),
+            nb::arg("data"),
+            "Add face scalar quantity from PyTorch CUDA tensor")
         .def(
-            "set_vertex_vector_quantity",
-            &MeshCUDAView::set_vertex_vector_quantity)
+            "add_vertex_vector_quantity",
+            [](MeshCUDAView& self,
+               const std::string& name,
+               nb::ndarray<nb::pytorch, float, nb::device::cuda> arr) {
+                if (arr.ndim() != 2 || arr.shape(1) != 3) {
+                    throw std::runtime_error("Expected Nx3 tensor");
+                }
+                size_t n = arr.shape(0);
+                auto buffer =
+                    Ruzino::cuda::create_cuda_linear_buffer<glm::vec3>(n);
+                void* dst = reinterpret_cast<void*>(buffer->get_device_ptr());
+                cudaMemcpy(
+                    dst,
+                    arr.data(),
+                    n * sizeof(glm::vec3),
+                    cudaMemcpyDeviceToDevice);
+                self.set_vertex_vector_quantity(name, buffer);
+            },
+            nb::arg("name"),
+            nb::arg("data"),
+            "Add vertex vector quantity from PyTorch CUDA tensor")
         .def(
-            "set_face_vector_quantity", &MeshCUDAView::set_face_vector_quantity)
+            "add_face_vector_quantity",
+            [](MeshCUDAView& self,
+               const std::string& name,
+               nb::ndarray<nb::pytorch, float, nb::device::cuda> arr) {
+                if (arr.ndim() != 2 || arr.shape(1) != 3) {
+                    throw std::runtime_error("Expected Nx3 tensor");
+                }
+                size_t n = arr.shape(0);
+                auto buffer =
+                    Ruzino::cuda::create_cuda_linear_buffer<glm::vec3>(n);
+                void* dst = reinterpret_cast<void*>(buffer->get_device_ptr());
+                cudaMemcpy(
+                    dst,
+                    arr.data(),
+                    n * sizeof(glm::vec3),
+                    cudaMemcpyDeviceToDevice);
+                self.set_face_vector_quantity(name, buffer);
+            },
+            nb::arg("name"),
+            nb::arg("data"),
+            "Add face vector quantity from PyTorch CUDA tensor")
         .def(
-            "set_vertex_parameterization_quantity",
-            &MeshCUDAView::set_vertex_parameterization_quantity)
+            "add_vertex_parameterization_quantity",
+            [](MeshCUDAView& self,
+               const std::string& name,
+               nb::ndarray<nb::pytorch, float, nb::device::cuda> arr) {
+                if (arr.ndim() != 2 || arr.shape(1) != 2) {
+                    throw std::runtime_error("Expected Nx2 tensor");
+                }
+                size_t n = arr.shape(0);
+                auto buffer =
+                    Ruzino::cuda::create_cuda_linear_buffer<glm::vec2>(n);
+                void* dst = reinterpret_cast<void*>(buffer->get_device_ptr());
+                cudaMemcpy(
+                    dst,
+                    arr.data(),
+                    n * sizeof(glm::vec2),
+                    cudaMemcpyDeviceToDevice);
+                self.set_vertex_parameterization_quantity(name, buffer);
+            },
+            nb::arg("name"),
+            nb::arg("data"),
+            "Add vertex parameterization quantity from PyTorch CUDA tensor")
         .def(
-            "set_face_corner_parameterization_quantity",
-            &MeshCUDAView::set_face_corner_parameterization_quantity);
-
-    // Helper to get CUDA device pointer from buffer for PyTorch tensor creation
-    m.def(
-        "get_cuda_buffer_ptr",
-        [](Ruzino::cuda::ICUDALinearBuffer* buffer) -> uintptr_t {
-            return static_cast<uintptr_t>(buffer->get_device_ptr());
-        },
-        nb::arg("buffer"),
-        "Get CUDA device pointer from buffer (for PyTorch tensor creation)");
-
-    m.def(
-        "get_cuda_buffer_size",
-        [](Ruzino::cuda::ICUDALinearBuffer* buffer) -> size_t {
-            return buffer->getDesc().element_count;
-        },
-        nb::arg("buffer"),
-        "Get element count from CUDA buffer");
-
-    m.def(
-        "get_cuda_buffer_element_size",
-        [](Ruzino::cuda::ICUDALinearBuffer* buffer) -> size_t {
-            return buffer->getDesc().element_size;
-        },
-        nb::arg("buffer"),
-        "Get element size from CUDA buffer");
-
-    m.def(
-        "get_sizeof_vec3",
-        []() -> size_t { return sizeof(glm::vec3); },
-        "Get sizeof(glm::vec3)");
+            "add_face_corner_parameterization_quantity",
+            [](MeshCUDAView& self,
+               const std::string& name,
+               nb::ndarray<nb::pytorch, float, nb::device::cuda> arr) {
+                if (arr.ndim() != 2 || arr.shape(1) != 2) {
+                    throw std::runtime_error("Expected Nx2 tensor");
+                }
+                size_t n = arr.shape(0);
+                auto buffer =
+                    Ruzino::cuda::create_cuda_linear_buffer<glm::vec2>(n);
+                void* dst = reinterpret_cast<void*>(buffer->get_device_ptr());
+                cudaMemcpy(
+                    dst,
+                    arr.data(),
+                    n * sizeof(glm::vec2),
+                    cudaMemcpyDeviceToDevice);
+                self.set_face_corner_parameterization_quantity(name, buffer);
+            },
+            nb::arg("name"),
+            nb::arg("data"),
+            "Add face corner parameterization quantity from PyTorch CUDA "
+            "tensor");
 #endif
 }

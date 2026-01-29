@@ -15,6 +15,10 @@ MeshComponent::~MeshComponent()
 
 void MeshComponent::apply_transform(const glm::mat4& transform)
 {
+    // Transform normals with the inverse transpose to preserve
+    // orthogonality
+    glm::mat3 normalTransform =
+        glm::mat3(glm::transpose(glm::inverse(transform)));
     auto vertices = get_vertices();
     for (auto& vertex : vertices) {
         glm::vec4 homogeneous = glm::vec4(vertex, 1.0f);
@@ -24,10 +28,6 @@ void MeshComponent::apply_transform(const glm::mat4& transform)
     auto normals = get_normals();
     if (!normals.empty()) {
         for (auto& normal : normals) {
-            // Transform normals with the inverse transpose to preserve
-            // orthogonality
-            glm::mat3 normalTransform =
-                glm::mat3(glm::transpose(glm::inverse(transform)));
             normal = glm::normalize(normalTransform * normal);
         }
         set_normals(normals);
