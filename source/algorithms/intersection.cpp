@@ -77,7 +77,7 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     // Calculate buffer offsets and total size
     total_buffer_size = vertices.size() * 3 * sizeof(float);
     index_buffer_offset = total_buffer_size;
-    total_buffer_size += indices.size() * sizeof(int);
+    total_buffer_size += indices.size() * sizeof(uint);
 
     if (!normals.empty()) {
         normal_buffer_offset = total_buffer_size;
@@ -99,12 +99,13 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
             .setCpuAccess(nvrhi::CpuAccessMode::None)
             .setIsAccelStructBuildInput(true)
             .setKeepInitialState(true)
-            .setDebugName("meshVertexBuffer");
+            .setDebugName("vertexBuffer");
 
     auto vertexBuffer = device->createBuffer(desc);
 
-    // Create single command list for all operations
-    auto commandlist = resource_allocator_.create(CommandListDesc{});
+    // Create command list for all operations
+    auto commandlist =
+        device->createCommandList({ .enableImmediateExecution = false });
     commandlist->open();
 
     // Copy vertices
@@ -115,7 +116,7 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     commandlist->writeBuffer(
         vertexBuffer,
         indices.data(),
-        indices.size() * sizeof(int),
+        indices.size() * sizeof(uint),
         index_buffer_offset);
 
     // Copy normals if available
@@ -168,8 +169,7 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     auto BLAS = device->createAccelStruct(blas_desc);
 
     commandlist->open();
-    nvrhi::utils::BuildBottomLevelAccelStruct(
-        commandlist, BLAS, blas_desc);
+    nvrhi::utils::BuildBottomLevelAccelStruct(commandlist, BLAS, blas_desc);
     commandlist->close();
     device->executeCommandList(commandlist);
     device->waitForIdle();
@@ -200,9 +200,6 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     commandlist->close();
     device->executeCommandList(commandlist);
     device->waitForIdle();
-
-    // Clean up commandlist
-    resource_allocator_.destroy(commandlist);
 
     // Fill output parameters if provided
     if (out_mesh_desc) {
@@ -247,8 +244,6 @@ nvrhi::BufferHandle IntersectToBuffer(
     nvrhi::BufferHandle vertex_buffer;
     auto accel =
         get_geomtry_tlas(BaseMesh, &mesh_desc, std::addressof(vertex_buffer));
-
-    auto commandlist = resource_allocator.create(CommandListDesc{});
 
     ProgramDesc desc;
     desc.shaderType = nvrhi::ShaderType::AllRayTracing;
@@ -306,7 +301,6 @@ nvrhi::BufferHandle IntersectToBuffer(
     resource_allocator.destroy(vertex_buffer);
     resource_allocator.destroy(mesh_cb);
     resource_allocator.destroy(program);
-    resource_allocator.destroy(commandlist);
 
     // Return the GPU buffer with results
     return result_buffer;
@@ -431,7 +425,7 @@ nvrhi::BufferHandle FindNeighborsFromPositionBuffer(
     unsigned& out_pair_count)
 {
     init_gpu_geometry_algorithms();
-    
+
     if (!position_buffer || point_count == 0) {
         out_pair_count = 0;
         return nullptr;
