@@ -19,11 +19,30 @@
 RUZINO_NAMESPACE_OPEN_SCOPE
 ResourceAllocator resource_allocator_;
 std::shared_ptr<ShaderFactory> shader_factory;
+nvrhi::BindingLayoutHandle bindless_buffer_layout_;
 
 ResourceAllocator& get_resource_allocator()
 {
     init_gpu_geometry_algorithms();
     return resource_allocator_;
+}
+
+nvrhi::BindingLayoutHandle get_bindless_buffer_layout()
+{
+    init_gpu_geometry_algorithms();
+
+    if (!bindless_buffer_layout_) {
+        auto device = RHI::get_device();
+        nvrhi::BindlessLayoutDesc buffer_layout_desc;
+        buffer_layout_desc.visibility = nvrhi::ShaderType::All;
+        buffer_layout_desc.maxCapacity = 8 * 1024;
+        buffer_layout_desc.addRegisterSpace(
+            nvrhi::BindingLayoutItem::RawBuffer_SRV(1));
+        bindless_buffer_layout_ =
+            device->createBindlessLayout(buffer_layout_desc);
+    }
+
+    return bindless_buffer_layout_;
 }
 
 void init_gpu_geometry_algorithms()
@@ -141,13 +160,22 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     device->executeCommandList(commandlist);
     device->waitForIdle();
 
-    // Set up mesh_desc
+    // Set up mesh_desc - initialize all fields to avoid undefined behavior
+    mesh_desc = {};  // Zero-initialize first
     mesh_desc.vbOffset = 0;
     mesh_desc.ibOffset = index_buffer_offset;
     mesh_desc.normalOffset = normal_buffer_offset;
     mesh_desc.texCrdOffset = texcoord_buffer_offset;
+    mesh_desc.tangentOffset = 0;
+    mesh_desc.skinningVbOffset = 0;
+    mesh_desc.prevVbOffset = 0;
+    mesh_desc.flags = 0;
+    mesh_desc.subsetMatIdOffset = 0;
     mesh_desc.normalInterpolation = InterpolationType::Vertex;
     mesh_desc.texCrdInterpolation = InterpolationType::Vertex;
+    mesh_desc.tangentInterpolation = InterpolationType::Vertex;
+    mesh_desc.padding = 0;
+    mesh_desc.bindlessIndex = 0;  // Will be set later when needed
 
     // Create BLAS
     nvrhi::rt::AccelStructDesc blas_desc;
@@ -214,40 +242,27 @@ nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     return TLAS;
 }
 
-nvrhi::BufferHandle IntersectToBuffer(
+nvrhi::BufferHandle IntersectToBuffer_Single(
     const nvrhi::BufferHandle& ray_buffer,
     size_t ray_count,
-    const Geometry& BaseMesh)
+    nvrhi::rt::IAccelStruct* tlas,
+    nvrhi::IBuffer* instance_desc_buffer,
+    nvrhi::IBuffer* mesh_desc_buffer,
+    nvrhi::IBuffer* vertex_buffer)
 {
     init_gpu_geometry_algorithms();
-    auto mesh_component = BaseMesh.get_component<MeshComponent>();
 
-    if (!mesh_component) {
+    if (!tlas || !instance_desc_buffer || !mesh_desc_buffer || !vertex_buffer) {
+        spdlog::error("IntersectToBuffer_Single: Missing required resources");
         return nullptr;
     }
-
-    std::vector<glm::vec3> vertices = mesh_component->get_vertices();
-
-    if (vertices.empty()) {
-        return nullptr;
-    }
-
-    std::vector<glm::vec3> normals = mesh_component->get_normals();
-    std::vector<int> indices = mesh_component->get_face_vertex_indices();
-    std::vector<glm::vec2> uvs = mesh_component->get_texcoords_array();
-
-    MeshDesc mesh_desc;
 
     auto& resource_allocator = get_resource_allocator();
     auto device = RHI::get_device();
 
-    nvrhi::BufferHandle vertex_buffer;
-    auto accel =
-        get_geomtry_tlas(BaseMesh, &mesh_desc, std::addressof(vertex_buffer));
-
     ProgramDesc desc;
     desc.shaderType = nvrhi::ShaderType::AllRayTracing;
-    desc.set_path(GEOM_COMPUTE_SHADER_DIR "intersection.slang");
+    desc.set_path(GEOM_COMPUTE_SHADER_DIR "intersection_single.slang");
     auto program = resource_allocator.create(desc);
 
     // Create output buffer for intersection results
@@ -260,27 +275,15 @@ nvrhi::BufferHandle IntersectToBuffer(
             .setCanHaveUAVs(true)
             .setDebugName("resultBuffer"));
 
-    auto mesh_cb = resource_allocator.create(
-        nvrhi::BufferDesc{}
-            .setByteSize(sizeof(MeshDesc))
-            .setStructStride(sizeof(MeshDesc))
-            .setInitialState(nvrhi::ResourceStates::ConstantBuffer)
-            .setKeepInitialState(true)
-            .setCpuAccess(nvrhi::CpuAccessMode::Write)
-            .setIsConstantBuffer(true)
-            .setDebugName("meshDescBuffer"));
-
-    void* data = device->mapBuffer(mesh_cb, nvrhi::CpuAccessMode::Write);
-    memcpy(data, &mesh_desc, sizeof(MeshDesc));
-    device->unmapBuffer(mesh_cb);
-
     ProgramVars program_vars(resource_allocator, program);
-    // Bind resources to the shader
-    program_vars["mesh"] = mesh_cb;
-    program_vars["g_vertexBuffer"] = vertex_buffer;
+
+    // Bind resources to the shader - single mesh version without bindless
     program_vars["g_rays"] = ray_buffer;
     program_vars["g_Result"] = result_buffer;
-    program_vars["SceneBVH"] = accel;
+    program_vars["SceneBVH"] = tlas;
+    program_vars["instanceDescBuffer"] = instance_desc_buffer;
+    program_vars["meshDescBuffer"] = mesh_desc_buffer;
+    program_vars["vertex_buffer"] = vertex_buffer;  // Direct buffer binding
 
     program_vars.finish_setting_vars();
 
@@ -297,9 +300,83 @@ nvrhi::BufferHandle IntersectToBuffer(
     raytracing_context.trace_rays({}, program_vars, ray_count, 1, 1);
     raytracing_context.finish();
 
+    // Wait for GPU to finish before releasing any resources
+    device->waitForIdle();
+
     // Clean up resources except for result_buffer
-    resource_allocator.destroy(vertex_buffer);
-    resource_allocator.destroy(mesh_cb);
+    resource_allocator.destroy(program);
+
+    // Return the GPU buffer with results
+    return result_buffer;
+}
+
+nvrhi::BufferHandle IntersectToBuffer(
+    const nvrhi::BufferHandle& ray_buffer,
+    size_t ray_count,
+    nvrhi::rt::IAccelStruct* tlas,
+    nvrhi::IBuffer* instance_desc_buffer,
+    nvrhi::IBuffer* mesh_desc_buffer,
+    nvrhi::IDescriptorTable* bindless_descriptor_table,
+    nvrhi::BindingLayoutHandle bindless_layout)
+{
+    init_gpu_geometry_algorithms();
+
+    if (!tlas || !instance_desc_buffer || !mesh_desc_buffer ||
+        !bindless_descriptor_table || !bindless_layout) {
+        spdlog::error("IntersectToBuffer: Missing required resources");
+        return nullptr;
+    }
+
+    auto& resource_allocator = get_resource_allocator();
+    auto device = RHI::get_device();
+
+    ProgramDesc desc;
+    desc.shaderType = nvrhi::ShaderType::AllRayTracing;
+    desc.set_path(GEOM_COMPUTE_SHADER_DIR "intersection.slang");
+    auto program = resource_allocator.create(desc);
+
+    // Create output buffer for intersection results
+    auto result_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(ray_count * sizeof(PointSample))
+            .setStructStride(sizeof(PointSample))
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true)
+            .setCanHaveUAVs(true)
+            .setDebugName("resultBuffer"));
+
+    ProgramVars program_vars(resource_allocator, program);
+
+    // Bind resources to the shader
+    program_vars["g_rays"] = ray_buffer;
+    program_vars["g_Result"] = result_buffer;
+    program_vars["SceneBVH"] = tlas;
+    program_vars["instanceDescBuffer"] = instance_desc_buffer;
+    program_vars["meshDescBuffer"] = mesh_desc_buffer;
+
+    // Bind bindless buffer descriptor table
+    program_vars.set_descriptor_table(
+        "t_BindlessBuffers", bindless_descriptor_table, bindless_layout);
+
+    program_vars.finish_setting_vars();
+
+    RaytracingContext raytracing_context(resource_allocator, program_vars);
+
+    // Set up shader names
+    raytracing_context.announce_raygeneration("RayGen");
+    raytracing_context.announce_hitgroup("ClosestHit");
+    raytracing_context.announce_miss("Miss");
+    raytracing_context.finish_announcing_shader_names();
+
+    // Execute ray tracing
+    raytracing_context.begin();
+    raytracing_context.trace_rays({}, program_vars, ray_count, 1, 1);
+    raytracing_context.finish();
+
+    // Wait for GPU to finish before releasing any resources
+    device->waitForIdle();
+
+    // Clean up resources except for result_buffer
     resource_allocator.destroy(program);
 
     // Return the GPU buffer with results
@@ -311,14 +388,84 @@ std::vector<PointSample> IntersectWithBuffer(
     size_t ray_count,
     const Geometry& BaseMesh)
 {
+    init_gpu_geometry_algorithms();
+    auto mesh_component = BaseMesh.get_component<MeshComponent>();
+
+    if (!mesh_component) {
+        return std::vector<PointSample>(ray_count);
+    }
+
+    std::vector<glm::vec3> vertices = mesh_component->get_vertices();
+    if (vertices.empty()) {
+        return std::vector<PointSample>(ray_count);
+    }
+
     auto& resource_allocator = get_resource_allocator();
     auto device = RHI::get_device();
 
-    // Get the GPU buffer with intersection results
-    auto result_buffer = IntersectToBuffer(ray_buffer, ray_count, BaseMesh);
+    // Build TLAS and get buffers for this geometry
+    MeshDesc mesh_desc;
+    nvrhi::BufferHandle vertex_buffer;
+    auto accel =
+        get_geomtry_tlas(BaseMesh, &mesh_desc, std::addressof(vertex_buffer));
+
+    if (!accel) {
+        return std::vector<PointSample>(ray_count);
+    }
+
+    // Create temporary instance descriptor buffer
+    GeometryInstanceData instance_data;
+    instance_data.geometryID = 0;
+    instance_data.materialID = 0;
+    instance_data.flags = 0;
+    instance_data.padding = 0;
+    instance_data.transform = float4x4::identity();
+
+    auto instance_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(sizeof(GeometryInstanceData))
+            .setStructStride(sizeof(GeometryInstanceData))
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true)
+            .setCpuAccess(nvrhi::CpuAccessMode::Write)
+            .setDebugName("tempInstanceBuffer"));
+
+    void* inst_data =
+        device->mapBuffer(instance_buffer, nvrhi::CpuAccessMode::Write);
+    memcpy(inst_data, &instance_data, sizeof(GeometryInstanceData));
+    device->unmapBuffer(instance_buffer);
+
+    // Create temporary mesh descriptor buffer
+    auto mesh_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(sizeof(MeshDesc))
+            .setStructStride(sizeof(MeshDesc))
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true)
+            .setCpuAccess(nvrhi::CpuAccessMode::Write)
+            .setDebugName("tempMeshBuffer"));
+
+    // No bindless descriptor table needed for single mesh version
+
+    // Write mesh desc
+    void* mesh_data =
+        device->mapBuffer(mesh_buffer, nvrhi::CpuAccessMode::Write);
+    memcpy(mesh_data, &mesh_desc, sizeof(MeshDesc));
+    device->unmapBuffer(mesh_buffer);
+
+    // Call the single mesh non-bindless version
+    auto result_buffer = IntersectToBuffer_Single(
+        ray_buffer,
+        ray_count,
+        accel.Get(),
+        instance_buffer.Get(),
+        mesh_buffer.Get(),
+        vertex_buffer.Get());
 
     // If we got a null buffer, return empty results
     if (!result_buffer) {
+        resource_allocator.destroy(instance_buffer);
+        resource_allocator.destroy(mesh_buffer);
         return std::vector<PointSample>(ray_count);
     }
 
@@ -348,6 +495,89 @@ std::vector<PointSample> IntersectWithBuffer(
     device->unmapBuffer(readback_buffer);
 
     // Clean up resources
+    resource_allocator.destroy(result_buffer);
+    resource_allocator.destroy(readback_buffer);
+    resource_allocator.destroy(commandlist);
+    resource_allocator.destroy(instance_buffer);
+    resource_allocator.destroy(mesh_buffer);
+
+    return result;
+}
+
+// New version using external TLAS and buffers with vector interface
+std::vector<PointSample> IntersectToBuffer(
+    const std::vector<glm::ray>& rays,
+    nvrhi::rt::IAccelStruct* tlas,
+    nvrhi::IBuffer* instance_desc_buffer,
+    nvrhi::IBuffer* mesh_desc_buffer,
+    nvrhi::IDescriptorTable* bindless_descriptor_table,
+    nvrhi::BindingLayoutHandle bindless_layout)
+{
+    init_gpu_geometry_algorithms();
+    auto& resource_allocator = get_resource_allocator();
+    auto device = RHI::get_device();
+
+    // Create ray buffer with input rays
+    auto ray_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(rays.size() * sizeof(glm::ray))
+            .setStructStride(sizeof(glm::ray))
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true)
+            .setCpuAccess(nvrhi::CpuAccessMode::Write)
+            .setDebugName("rayBuffer"));
+
+    // Copy rays to the ray buffer
+    void* data = device->mapBuffer(ray_buffer, nvrhi::CpuAccessMode::Write);
+    memcpy(data, rays.data(), rays.size() * sizeof(glm::ray));
+    device->unmapBuffer(ray_buffer);
+
+    // Call the buffer version
+    auto result_buffer = IntersectToBuffer(
+        ray_buffer,
+        rays.size(),
+        tlas,
+        instance_desc_buffer,
+        mesh_desc_buffer,
+        bindless_descriptor_table,
+        bindless_layout);
+
+    if (!result_buffer) {
+        resource_allocator.destroy(ray_buffer);
+        return {};
+    }
+
+    // Read back results
+    auto readback_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(rays.size() * sizeof(PointSample))
+            .setStructStride(sizeof(PointSample))
+            .setInitialState(nvrhi::ResourceStates::CopyDest)
+            .setKeepInitialState(true)
+            .setCpuAccess(nvrhi::CpuAccessMode::Read)
+            .setDebugName("readbackBuffer"));
+
+    auto commandlist =
+        device->createCommandList({ .enableImmediateExecution = false });
+    commandlist->open();
+    commandlist->copyBuffer(
+        readback_buffer,
+        0,
+        result_buffer,
+        0,
+        rays.size() * sizeof(PointSample));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    std::vector<PointSample> result(rays.size());
+    void* readback_data =
+        device->mapBuffer(readback_buffer, nvrhi::CpuAccessMode::Read);
+    memcpy(result.data(), readback_data, rays.size() * sizeof(PointSample));
+    device->unmapBuffer(readback_buffer);
+
+    // Clean up resources
+    resource_allocator.destroy(ray_buffer);
     resource_allocator.destroy(result_buffer);
     resource_allocator.destroy(readback_buffer);
     resource_allocator.destroy(commandlist);

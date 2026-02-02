@@ -9,10 +9,104 @@
 
 #ifdef GPU_GEOM_ALGORITHM
 
+#include <filesystem>
+
 #include "RHI/rhi.hpp"
 #include "glm/ext/matrix_transform.hpp"
+#include "pxr/imaging/garch/glApi.h"
+#include "pxr/usd/usd/prim.h"
+#include "pxr/usd/usd/stage.h"
+#include "pxr/usdImaging/usdImagingGL/engine.h"
+#include "spdlog/spdlog.h"
+
+// Forward declarations from render_util.hpp (to avoid stb_image dependency)
+namespace RenderUtil {
+inline nvrhi::rt::IAccelStruct* GetTLAS(pxr::UsdImagingGLEngine* renderer)
+{
+    auto handle = renderer->GetRendererSetting(pxr::TfToken("VulkanTLAS"));
+    if (!handle.IsHolding<const void*>()) {
+        spdlog::warn("Failed to get TLAS from renderer");
+        return nullptr;
+    }
+    auto bare_pointer = handle.Get<const void*>();
+    return static_cast<nvrhi::rt::IAccelStruct*>(
+        const_cast<void*>(bare_pointer));
+}
+
+inline nvrhi::IBuffer* GetInstanceDescBuffer(pxr::UsdImagingGLEngine* renderer)
+{
+    auto handle =
+        renderer->GetRendererSetting(pxr::TfToken("VulkanInstanceDescBuffer"));
+    if (!handle.IsHolding<const void*>()) {
+        spdlog::warn("Failed to get InstanceDescBuffer from renderer");
+        return nullptr;
+    }
+    auto bare_pointer = handle.Get<const void*>();
+    return static_cast<nvrhi::IBuffer*>(const_cast<void*>(bare_pointer));
+}
+
+inline nvrhi::IBuffer* GetMeshDescBuffer(pxr::UsdImagingGLEngine* renderer)
+{
+    auto handle =
+        renderer->GetRendererSetting(pxr::TfToken("VulkanMeshDescBuffer"));
+    if (!handle.IsHolding<const void*>()) {
+        spdlog::warn("Failed to get MeshDescBuffer from renderer");
+        return nullptr;
+    }
+    auto bare_pointer = handle.Get<const void*>();
+    return static_cast<nvrhi::IBuffer*>(const_cast<void*>(bare_pointer));
+}
+
+inline nvrhi::IDescriptorTable* GetBindlessDescriptorTable(
+    pxr::UsdImagingGLEngine* renderer)
+{
+    auto handle =
+        renderer->GetRendererSetting(pxr::TfToken("VulkanBindlessBufferTable"));
+    if (!handle.IsHolding<const void*>()) {
+        spdlog::warn("Failed to get BindlessBufferTable from renderer");
+        return nullptr;
+    }
+    auto bare_pointer = handle.Get<const void*>();
+    return static_cast<nvrhi::IDescriptorTable*>(
+        const_cast<void*>(bare_pointer));
+}
+
+inline nvrhi::IBindingLayout* GetBindlessBufferLayout(
+    pxr::UsdImagingGLEngine* renderer)
+{
+    auto handle = renderer->GetRendererSetting(
+        pxr::TfToken("VulkanBindlessBufferLayout"));
+    if (!handle.IsHolding<const void*>()) {
+        spdlog::warn("Failed to get BindlessBufferLayout from renderer");
+        return nullptr;
+    }
+    auto bare_pointer = handle.Get<const void*>();
+    return static_cast<nvrhi::IBindingLayout*>(const_cast<void*>(bare_pointer));
+}
+
+// Graphics context initialization
+inline void CreateGLContext()
+{
+#ifdef _WIN32
+    HDC hdc = GetDC(GetConsoleWindow());
+    PIXELFORMATDESCRIPTOR pfd = {};
+    pfd.nSize = sizeof(pfd);
+    pfd.nVersion = 1;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+    pfd.iPixelType = PFD_TYPE_RGBA;
+    pfd.cColorBits = 24;
+
+    int pixelFormat = ChoosePixelFormat(hdc, &pfd);
+    SetPixelFormat(hdc, pixelFormat, &pfd);
+
+    HGLRC hglrc = wglCreateContext(hdc);
+    wglMakeCurrent(hdc, hglrc);
+#endif
+}
+}  // namespace RenderUtil
 
 using namespace Ruzino;
+using namespace RenderUtil;
 
 class IntersectionTests : public ::testing::Test {
    protected:
@@ -528,6 +622,208 @@ TEST_F(IntersectionTests, FindNeighborsBoxDistance_0_1)
         EXPECT_TRUE(expected_pairs.count(pair) > 0)
             << "GPU found pair (" << pair.first << ", " << pair.second
             << ") but CPU didn't";
+    }
+}
+
+TEST_F(IntersectionTests, USDSceneIntersection)
+{
+    using namespace pxr;
+
+    // Initialize OpenGL context
+    CreateGLContext();
+    GarchGLApiLoad();
+
+    // Check if tt.usdc exists
+    std::filesystem::path usd_file = "tt.usdc";
+    if (!std::filesystem::exists(usd_file)) {
+        GTEST_SKIP() << "USD file tt.usdc not found, skipping test";
+        return;
+    }
+
+    std::cout << "Loading USD stage from: " << usd_file << std::endl;
+
+    // Load USD stage
+    UsdStageRefPtr stage = UsdStage::Open(usd_file.string());
+    ASSERT_TRUE(stage) << "Failed to load USD stage";
+
+    // Create USD imaging engine
+    UsdImagingGLEngine engine;
+
+    // Get available renderers and select Ruzino
+    auto available_renderers = engine.GetRendererPlugins();
+    std::cout << "Available renderers:" << std::endl;
+    for (size_t i = 0; i < available_renderers.size(); ++i) {
+        std::cout << "  [" << i << "] " << available_renderers[i].GetString()
+                  << std::endl;
+    }
+
+    // Find and select Ruzino renderer
+    bool found_ruzino = false;
+    for (size_t i = 0; i < available_renderers.size(); ++i) {
+        if (available_renderers[i].GetString() == "Hd_RUZINO_RendererPlugin") {
+            engine.SetRendererPlugin(available_renderers[i]);
+            std::cout << "Selected renderer: "
+                      << available_renderers[i].GetString() << std::endl;
+            found_ruzino = true;
+            break;
+        }
+    }
+
+    if (!found_ruzino) {
+        GTEST_SKIP() << "Ruzino renderer plugin not found";
+        return;
+    }
+
+    GfVec4d viewport(0, 0, 400, 400);
+    engine.SetRenderViewport(viewport);
+    engine.SetCameraPath(SdfPath("/World/Camera"));
+
+    UsdImagingGLRenderParams params;
+    params.frame = UsdTimeCode(1.0);
+    params.complexity = 1.0f;
+    params.drawMode = UsdImagingGLDrawMode::DRAW_SHADED_SMOOTH;
+    params.enableLighting = true;
+    params.enableSceneMaterials = true;
+    params.clearColor = GfVec4f(0.0f, 0.0f, 0.0f, 1.0f);
+
+    std::cout << "Rendering frame to build TLAS..." << std::endl;
+    engine.Render(stage->GetPseudoRoot(), params);
+
+    // Get TLAS and buffers
+    auto* tlas = GetTLAS(&engine);
+    auto* instance_buffer = GetInstanceDescBuffer(&engine);
+    auto* mesh_buffer = GetMeshDescBuffer(&engine);
+    auto* bindless_table = GetBindlessDescriptorTable(&engine);
+    auto* bindless_layout = GetBindlessBufferLayout(&engine);
+
+    ASSERT_NE(tlas, nullptr) << "Failed to get TLAS";
+    ASSERT_NE(instance_buffer, nullptr) << "Failed to get instance buffer";
+    ASSERT_NE(mesh_buffer, nullptr) << "Failed to get mesh buffer";
+    ASSERT_NE(bindless_table, nullptr) << "Failed to get bindless table";
+    ASSERT_NE(bindless_layout, nullptr) << "Failed to get bindless layout";
+
+    std::cout << "TLAS: " << tlas << std::endl;
+    std::cout << "Instance buffer: " << instance_buffer << std::endl;
+    std::cout << "Mesh buffer: " << mesh_buffer << std::endl;
+    std::cout << "Bindless table: " << bindless_table << std::endl;
+    std::cout << "Bindless layout: " << bindless_layout << std::endl;
+
+    // Create rays (10x10 grid shooting downward from z=5)
+    std::vector<glm::ray> rays;
+    const int grid_size = 10;
+    for (int y = 0; y < grid_size; ++y) {
+        for (int x = 0; x < grid_size; ++x) {
+            float fx = -2.0f + (x / float(grid_size - 1)) * 4.0f;
+            float fy = -2.0f + (y / float(grid_size - 1)) * 4.0f;
+            glm::vec3 origin(fx, fy, 5.0f);
+            glm::vec3 direction(0.0f, 0.0f, -1.0f);
+            rays.push_back(glm::ray(origin, direction));
+        }
+    }
+
+    std::cout << "Created " << rays.size() << " rays" << std::endl;
+
+    // Launch intersection
+    std::cout << "Launching intersection..." << std::endl;
+    std::vector<PointSample> samples = IntersectToBuffer(
+        rays,
+        tlas,
+        instance_buffer,
+        mesh_buffer,
+        bindless_table,
+        bindless_layout);
+
+    ASSERT_EQ(samples.size(), rays.size());
+
+    // Count hits
+    int hit_count = 0;
+    for (const auto& sample : samples) {
+        if (sample.valid) {
+            hit_count++;
+        }
+    }
+
+    std::cout << "Intersection results:" << std::endl;
+    std::cout << "  Total rays: " << rays.size() << std::endl;
+    std::cout << "  Hits: " << hit_count << std::endl;
+    std::cout << "  Misses: " << (rays.size() - hit_count) << std::endl;
+    std::cout << "  Hit rate: " << (100.0f * hit_count / rays.size()) << "%"
+              << std::endl;
+
+    // At least some rays should hit geometry
+    EXPECT_GT(hit_count, 0) << "No rays hit geometry";
+
+    // Verify hit data quality
+    int valid_normals = 0;
+    int valid_positions = 0;
+    float min_z = std::numeric_limits<float>::max();
+    float max_z = std::numeric_limits<float>::lowest();
+
+    for (const auto& sample : samples) {
+        if (sample.valid) {
+            // Check if position is reasonable (should be below z=5 origin)
+            if (sample.position.z < 5.0f && sample.position.z > -5.0f) {
+                valid_positions++;
+                min_z = std::min(min_z, sample.position.z);
+                max_z = std::max(max_z, sample.position.z);
+            }
+
+            // Check if normal is normalized (length close to 1)
+            float normal_length = std::sqrt(
+                sample.normal.x * sample.normal.x +
+                sample.normal.y * sample.normal.y +
+                sample.normal.z * sample.normal.z);
+            if (std::abs(normal_length - 1.0f) < 0.1f) {
+                valid_normals++;
+            }
+        }
+    }
+
+    std::cout << "  Valid positions: " << valid_positions << "/" << hit_count
+              << std::endl;
+    std::cout << "  Valid normals: " << valid_normals << "/" << hit_count
+              << std::endl;
+    std::cout << "  Position Z range: [" << min_z << ", " << max_z << "]"
+              << std::endl;
+
+    // Most hits should have valid data
+    EXPECT_GT(valid_positions, hit_count * 0.9) << "Many positions are invalid";
+    EXPECT_GT(valid_normals, hit_count * 0.9)
+        << "Many normals are not normalized";
+
+    // Print first few hits with detailed info
+    std::cout << "\nFirst 5 hits:" << std::endl;
+    int printed = 0;
+    for (size_t i = 0; i < samples.size() && printed < 5; ++i) {
+        if (samples[i].valid) {
+            float normal_length = std::sqrt(
+                samples[i].normal.x * samples[i].normal.x +
+                samples[i].normal.y * samples[i].normal.y +
+                samples[i].normal.z * samples[i].normal.z);
+
+            std::cout << "  [" << printed << "] Ray " << i << std::endl;
+            std::cout << "      Position: (" << samples[i].position.x << ", "
+                      << samples[i].position.y << ", " << samples[i].position.z
+                      << ")" << std::endl;
+            std::cout << "      Normal: (" << samples[i].normal.x << ", "
+                      << samples[i].normal.y << ", " << samples[i].normal.z
+                      << ") [len=" << normal_length << "]" << std::endl;
+            std::cout << "      UV: (" << samples[i].uv.x << ", "
+                      << samples[i].uv.y << ")" << std::endl;
+            printed++;
+        }
+    }
+
+    // Print some miss cases for debugging
+    std::cout << "\nFirst 3 misses:" << std::endl;
+    int miss_printed = 0;
+    for (size_t i = 0; i < samples.size() && miss_printed < 3; ++i) {
+        if (!samples[i].valid) {
+            std::cout << "  [" << miss_printed << "] Ray " << i << ": origin=("
+                      << rays[i].origin.x << ", " << rays[i].origin.y << ", "
+                      << rays[i].origin.z << ")" << std::endl;
+            miss_printed++;
+        }
     }
 }
 

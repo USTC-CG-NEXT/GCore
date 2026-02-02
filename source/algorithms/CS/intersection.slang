@@ -2,7 +2,7 @@
 import gfray;
 import pointsamples;
 import Scene.SceneTypes;
-import mesh_geometry;
+import Scene.BindlessVertexBuffer;
 
 StructuredBuffer<GfRay> g_rays;  // Input rays
 RWStructuredBuffer<PointSample> g_Result;
@@ -12,7 +12,7 @@ struct RayPayload {
     float3 position;
     float3 normal;
     float2 texCoord;
-    bool valid;
+    uint valid;  // Match PointSample's uint type
 };
 
 [shader("raygeneration")]
@@ -33,7 +33,7 @@ void RayGen()
     ray.TMax = 10000.0;
 
     RayPayload payload;
-    payload.valid = false;
+    payload.valid = 0;
 
     TraceRay(
         SceneBVH,  // Acceleration structure
@@ -59,47 +59,23 @@ void ClosestHit(
     inout RayPayload payload,
     in BuiltInTriangleIntersectionAttributes attribs)
 {
-    // Get the primitive index
+    // Get the instance and primitive index
+    uint instanceID = InstanceID();
     uint primitiveIndex = PrimitiveIndex();
 
-    // Load the three vertices of the hit triangle
-    uint i0 = primitiveIndex * 3;
-    uint i1 = primitiveIndex * 3 + 1;
-    uint i2 = primitiveIndex * 3 + 2;
+    // Use the bindless vertex buffer system to load vertex data
+    float2 barycentrics = attribs.barycentrics;
+    
+    VertexInfo vertex = get_interpolated_vertex(
+        instanceID,
+        primitiveIndex,
+        barycentrics);
 
-    StaticVertexData v[3];
-    v[0] = load_vertex(i0);
-    v[1] = load_vertex(i1);
-    v[2] = load_vertex(i2);
-
-    // Barycentric coordinates
-    float3 barycentrics = float3(
-        1.0 - attribs.barycentrics.x - attribs.barycentrics.y,
-        attribs.barycentrics.x,
-        attribs.barycentrics.y);
-
-    // Interpolate position
-    float3 hitPosition = v[0].position * barycentrics.x +
-                         v[1].position * barycentrics.y +
-                         v[2].position * barycentrics.z;
-
-    // Interpolate normal
-    float3 hitNormal = normalize(
-        v[0].normal * barycentrics.x + v[1].normal * barycentrics.y +
-        v[2].normal * barycentrics.z);
-
-    // Interpolate texture coordinates
-    float2 hitTexCoord = v[0].texCrd * barycentrics.x +
-                         v[1].texCrd * barycentrics.y +
-                         v[2].texCrd * barycentrics.z;
-
-    var objectToWorld = ObjectToWorld4x3();
-
-    // Transform position and normal to world space
-    payload.position = mul(float4(hitPosition, 1.0), objectToWorld).xyz;
-    payload.normal = normalize(mul(float4(hitNormal, 0.0), objectToWorld).xyz);
-    payload.texCoord = hitTexCoord;
-    payload.valid = true;
+    // Store results
+    payload.position = vertex.posW;
+    payload.normal = vertex.normalW;
+    payload.texCoord = vertex.texC;
+    payload.valid = 1;
 }
 
 // Miss shader
@@ -107,7 +83,7 @@ void ClosestHit(
 void Miss(inout RayPayload payload)
 {
     // No hit found
-    payload.valid = false;
+    payload.valid = 0;
     payload.position = float3(0, 0, 0);
     payload.normal = float3(0, 0, 0);
     payload.texCoord = float2(0, 0);

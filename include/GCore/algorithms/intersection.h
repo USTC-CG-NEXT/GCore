@@ -4,6 +4,7 @@
 #include "GCore/api.h"
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
+#include "nvrhi/nvrhi.h"
 
 namespace glm {
 struct ray {
@@ -37,6 +38,9 @@ GEOMETRY_API void deinit_gpu_geometry_algorithms();
 // Remember to destroy the geometry explicitly with the resource allocator after
 // use.
 GEOMETRY_API ResourceAllocator& get_resource_allocator();
+
+GEOMETRY_API nvrhi::BindingLayoutHandle get_bindless_buffer_layout();
+
 GEOMETRY_API nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     const Geometry& geometry,
     MeshDesc* out_mesh_desc = nullptr,
@@ -47,14 +51,28 @@ GEOMETRY_API std::vector<PointSample> IntersectWithBuffer(
     size_t ray_count,
     const Geometry& BaseMesh);
 
+// New version using external TLAS and buffers
 GEOMETRY_API nvrhi::BufferHandle IntersectToBuffer(
     const nvrhi::BufferHandle& ray_buffer,
     size_t ray_count,
-    const Geometry& BaseMesh);
+    nvrhi::rt::IAccelStruct* tlas,
+    nvrhi::IBuffer* instance_desc_buffer,
+    nvrhi::IBuffer* mesh_desc_buffer,
+    nvrhi::IDescriptorTable* bindless_descriptor_table,
+    nvrhi::BindingLayoutHandle bindless_layout);
 
 GEOMETRY_API std::vector<PointSample> Intersect(
     const std::vector<glm::ray>& rays,
     const Geometry& BaseMesh);
+
+// New version using external TLAS and buffers with vector interface
+GEOMETRY_API std::vector<PointSample> IntersectToBuffer(
+    const std::vector<glm::ray>& rays,
+    nvrhi::rt::IAccelStruct* tlas,
+    nvrhi::IBuffer* instance_desc_buffer,
+    nvrhi::IBuffer* mesh_desc_buffer,
+    nvrhi::IDescriptorTable* bindless_descriptor_table,
+    nvrhi::BindingLayoutHandle bindless_layout);
 
 GEOMETRY_API std::vector<PointSample> Intersect(
     const std::vector<glm::vec3>& start_point,
