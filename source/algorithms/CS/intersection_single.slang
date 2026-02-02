@@ -29,12 +29,14 @@ void RayGen()
     // Ray direction comes from input rays
     float3 origin = g_rays[linearIndex].origin;
     float3 direction = g_rays[linearIndex].direction;
+    float tmin = g_rays[linearIndex].tmin;
+    float tmax = g_rays[linearIndex].tmax;
 
     RayDesc ray;
     ray.Origin = origin;
     ray.Direction = direction;
-    ray.TMin = 0.0;
-    ray.TMax = 10000.0;
+    ray.TMin = tmin;
+    ray.TMax = tmax;
 
     RayPayload payload;
     payload.valid = 0;

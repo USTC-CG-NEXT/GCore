@@ -19,30 +19,11 @@
 RUZINO_NAMESPACE_OPEN_SCOPE
 ResourceAllocator resource_allocator_;
 std::shared_ptr<ShaderFactory> shader_factory;
-nvrhi::BindingLayoutHandle bindless_buffer_layout_;
 
 ResourceAllocator& get_resource_allocator()
 {
     init_gpu_geometry_algorithms();
     return resource_allocator_;
-}
-
-nvrhi::BindingLayoutHandle get_bindless_buffer_layout()
-{
-    init_gpu_geometry_algorithms();
-
-    if (!bindless_buffer_layout_) {
-        auto device = RHI::get_device();
-        nvrhi::BindlessLayoutDesc buffer_layout_desc;
-        buffer_layout_desc.visibility = nvrhi::ShaderType::All;
-        buffer_layout_desc.maxCapacity = 8 * 1024;
-        buffer_layout_desc.addRegisterSpace(
-            nvrhi::BindingLayoutItem::RawBuffer_SRV(1));
-        bindless_buffer_layout_ =
-            device->createBindlessLayout(buffer_layout_desc);
-    }
-
-    return bindless_buffer_layout_;
 }
 
 void init_gpu_geometry_algorithms()
@@ -505,7 +486,7 @@ std::vector<PointSample> IntersectWithBuffer(
 }
 
 // New version using external TLAS and buffers with vector interface
-std::vector<PointSample> IntersectToBuffer(
+std::vector<PointSample> IntersectWithScene(
     const std::vector<glm::ray>& rays,
     nvrhi::rt::IAccelStruct* tlas,
     nvrhi::IBuffer* instance_desc_buffer,
@@ -647,6 +628,264 @@ std::vector<PointSample> IntersectInterweaved(
     }
     return Intersect(rays, BaseMesh);
 }
+
+// ============================================
+// ============ Geometry Contacts =============
+// ============================================
+
+nvrhi::BufferHandle IntersectContactsToBuffer(
+    const Geometry& geom_a,
+    const Geometry& geom_b,
+    size_t& out_contact_count)
+{
+    init_gpu_geometry_algorithms();
+
+    auto mesh_a = geom_a.get_component<MeshComponent>();
+    if (!mesh_a) {
+        out_contact_count = 0;
+        return nullptr;
+    }
+
+    auto& resource_allocator = get_resource_allocator();
+    auto device = RHI::get_device();
+
+    // Get TLAS and buffers for geom_b (the surface to intersect)
+    MeshDesc mesh_desc_b;
+    nvrhi::BufferHandle vertex_buffer_b;
+    auto tlas_b =
+        get_geomtry_tlas(geom_b, &mesh_desc_b, std::addressof(vertex_buffer_b));
+
+    if (!tlas_b) {
+        out_contact_count = 0;
+        return nullptr;
+    }
+
+    // Apply transform to geom_a to get world-space vertices
+    Geometry geom_a_copy = geom_a;
+    geom_a_copy.apply_transform();
+
+    // Extract edges from transformed geom_a
+    auto mesh_a_transformed = geom_a_copy.get_component<MeshComponent>();
+    auto vertices_a = mesh_a_transformed->get_vertices();
+    auto face_indices_a = mesh_a_transformed->get_face_vertex_indices();
+    auto face_counts_a = mesh_a_transformed->get_face_vertex_counts();
+
+    // Build edge list from faces
+    std::vector<glm::ray> edge_rays;
+    size_t index_offset = 0;
+
+    // Statistics
+    float max_edge_length = 0.0f;
+    float min_edge_length = FLT_MAX;
+    float total_edge_length = 0.0f;
+    int edge_count = 0;
+
+    for (size_t face_idx = 0; face_idx < face_counts_a.size(); ++face_idx) {
+        int face_vertex_count = face_counts_a[face_idx];
+
+        // For each edge in the face
+        for (int i = 0; i < face_vertex_count; ++i) {
+            int next_i = (i + 1) % face_vertex_count;
+
+            int v0_idx = face_indices_a[index_offset + i];
+            int v1_idx = face_indices_a[index_offset + next_i];
+
+            // Vertices are already in world space after apply_transform
+            glm::vec3 v0 = vertices_a[v0_idx];
+            glm::vec3 v1 = vertices_a[v1_idx];
+
+            // Create ray from v0 to v1
+            glm::vec3 direction = v1 - v0;
+            float edge_length = glm::length(direction);
+
+            if (edge_length > 1e-6f) {
+                direction /= edge_length;  // Normalize
+                glm::ray edge_ray;
+                edge_ray.origin = v0;
+                edge_ray.direction = direction;
+                edge_ray.tmin = 0.0f;
+                edge_ray.tmax = edge_length;  // Limit ray to edge length
+                edge_rays.push_back(edge_ray);
+
+                // Update statistics
+                max_edge_length = std::max(max_edge_length, edge_length);
+                min_edge_length = std::min(min_edge_length, edge_length);
+                total_edge_length += edge_length;
+                edge_count++;
+            }
+        }
+
+        index_offset += face_vertex_count;
+    }
+
+    // Print edge statistics
+    if (edge_count > 0) {
+        spdlog::info("Edge Statistics for geom_a:");
+        spdlog::info("  Total edges: {}", edge_count);
+        spdlog::info("  Min edge length: {}", min_edge_length);
+        spdlog::info("  Max edge length: {}", max_edge_length);
+        spdlog::info(
+            "  Average edge length: {}", total_edge_length / edge_count);
+
+        // Print first few edge origins for debugging
+        spdlog::info("  Sample edge origins (first 5):");
+        for (size_t i = 0; i < std::min(size_t(5), edge_rays.size()); ++i) {
+            spdlog::info(
+                "    Edge {}: origin=({}, {}, {}), tmax={}",
+                i,
+                edge_rays[i].origin.x,
+                edge_rays[i].origin.y,
+                edge_rays[i].origin.z,
+                edge_rays[i].tmax);
+        }
+    }
+
+    if (edge_rays.empty()) {
+        out_contact_count = 0;
+        return nullptr;
+    }
+
+    // Create GPU buffer for rays
+    auto ray_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(edge_rays.size() * sizeof(glm::ray))
+            .setStructStride(sizeof(glm::ray))
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true)
+            .setDebugName("edgeRaysBuffer"));
+
+    auto commandlist = resource_allocator.create(CommandListDesc{});
+    commandlist->open();
+    commandlist->writeBuffer(
+        ray_buffer, edge_rays.data(), edge_rays.size() * sizeof(glm::ray));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    // Create instance desc buffer
+    GeometryInstanceData instance_desc{};
+    instance_desc.materialID = 0;
+    instance_desc.geometryID = 0;
+    instance_desc.flags = 0;
+    instance_desc.padding = 0;
+    // Set identity transform
+    instance_desc.transform[0][0] = 1.0f;
+    instance_desc.transform[1][1] = 1.0f;
+    instance_desc.transform[2][2] = 1.0f;
+    instance_desc.transform[3][3] = 1.0f;
+
+    auto instance_desc_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(sizeof(GeometryInstanceData))
+            .setStructStride(sizeof(GeometryInstanceData))
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true)
+            .setDebugName("instanceDescBuffer"));
+
+    commandlist->open();
+    commandlist->writeBuffer(
+        instance_desc_buffer, &instance_desc, sizeof(GeometryInstanceData));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    // Create mesh desc buffer
+    auto mesh_desc_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(sizeof(MeshDesc))
+            .setStructStride(sizeof(MeshDesc))
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true)
+            .setDebugName("meshDescBuffer"));
+
+    commandlist->open();
+    commandlist->writeBuffer(mesh_desc_buffer, &mesh_desc_b, sizeof(MeshDesc));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    // Perform intersection using single-mesh version
+    auto result_buffer = IntersectToBuffer_Single(
+        ray_buffer,
+        edge_rays.size(),
+        tlas_b.Get(),
+        instance_desc_buffer.Get(),
+        mesh_desc_buffer.Get(),
+        vertex_buffer_b.Get());
+
+    out_contact_count = edge_rays.size();
+
+    // Clean up temporary resources
+    resource_allocator.destroy(ray_buffer);
+    resource_allocator.destroy(instance_desc_buffer);
+    resource_allocator.destroy(mesh_desc_buffer);
+    resource_allocator.destroy(commandlist);
+
+    return result_buffer;
+}
+
+std::vector<PointSample> IntersectContacts(
+    const Geometry& geom_a,
+    const Geometry& geom_b)
+{
+    init_gpu_geometry_algorithms();
+
+    size_t contact_count = 0;
+    auto contact_buffer =
+        IntersectContactsToBuffer(geom_a, geom_b, contact_count);
+
+    if (!contact_buffer || contact_count == 0) {
+        if (contact_buffer) {
+            get_resource_allocator().destroy(contact_buffer);
+        }
+        return std::vector<PointSample>();
+    }
+
+    auto& resource_allocator = get_resource_allocator();
+    auto device = RHI::get_device();
+
+    std::vector<PointSample> result;
+    result.resize(contact_count);
+
+    // Create readback buffer
+    auto readback_buffer = resource_allocator.create(
+        nvrhi::BufferDesc{}
+            .setByteSize(contact_count * sizeof(PointSample))
+            .setCpuAccess(nvrhi::CpuAccessMode::Read)
+            .setInitialState(nvrhi::ResourceStates::CopyDest)
+            .setKeepInitialState(true)
+            .setDebugName("contactReadbackBuffer"));
+
+    // Copy data from GPU to readback buffer
+    auto commandlist = resource_allocator.create(CommandListDesc{});
+    commandlist->open();
+    commandlist->copyBuffer(
+        readback_buffer,
+        0,
+        contact_buffer,
+        0,
+        contact_count * sizeof(PointSample));
+    commandlist->close();
+    device->executeCommandList(commandlist);
+    device->waitForIdle();
+
+    // Map and read the results
+    void* mapped_data =
+        device->mapBuffer(readback_buffer, nvrhi::CpuAccessMode::Read);
+    memcpy(result.data(), mapped_data, contact_count * sizeof(PointSample));
+    device->unmapBuffer(readback_buffer);
+
+    // Clean up resources
+    resource_allocator.destroy(contact_buffer);
+    resource_allocator.destroy(readback_buffer);
+    resource_allocator.destroy(commandlist);
+
+    return result;
+}
+
+// ============================================
+// ============= Neighbor search ==============
+// ============================================
 
 nvrhi::BufferHandle FindNeighborsFromPositionBuffer(
     const nvrhi::BufferHandle& position_buffer,

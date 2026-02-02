@@ -10,6 +10,8 @@ namespace glm {
 struct ray {
     glm::vec3 origin;
     glm::vec3 direction;
+    float tmin = 0.0f;
+    float tmax = 1e30f;  // Large number for "infinite" rays
 };
 }  // namespace glm
 #ifdef GPU_GEOM_ALGORITHM
@@ -39,8 +41,6 @@ GEOMETRY_API void deinit_gpu_geometry_algorithms();
 // use.
 GEOMETRY_API ResourceAllocator& get_resource_allocator();
 
-GEOMETRY_API nvrhi::BindingLayoutHandle get_bindless_buffer_layout();
-
 GEOMETRY_API nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     const Geometry& geometry,
     MeshDesc* out_mesh_desc = nullptr,
@@ -66,7 +66,7 @@ GEOMETRY_API std::vector<PointSample> Intersect(
     const Geometry& BaseMesh);
 
 // New version using external TLAS and buffers with vector interface
-GEOMETRY_API std::vector<PointSample> IntersectToBuffer(
+GEOMETRY_API std::vector<PointSample> IntersectWithScene(
     const std::vector<glm::ray>& rays,
     nvrhi::rt::IAccelStruct* tlas,
     nvrhi::IBuffer* instance_desc_buffer,
@@ -84,6 +84,25 @@ GEOMETRY_API std::vector<PointSample> IntersectInterweaved(
     const std::vector<glm::vec3>& start_point,
     const std::vector<glm::vec3>& next_point,
     const Geometry& BaseMesh);
+
+// ============================================
+// ============ Geometry Contacts =============
+// ============================================
+
+// Return all contact that geom_a's edges touches geom_b's surface
+GEOMETRY_API std::vector<PointSample> IntersectContacts(
+    const Geometry& geom_a,
+    const Geometry& geom_b);
+
+// GPU buffer version - returns buffer containing contact points
+GEOMETRY_API nvrhi::BufferHandle IntersectContactsToBuffer(
+    const Geometry& geom_a,
+    const Geometry& geom_b,
+    size_t& out_contact_count);
+
+// ============================================
+// ============= Neighbor search ==============
+// ============================================
 
 // Find neighbors from Geometry (convenience wrapper)
 GEOMETRY_API nvrhi::BufferHandle FindNeighborsToBuffer(
