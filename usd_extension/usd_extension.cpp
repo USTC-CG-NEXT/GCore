@@ -8,6 +8,7 @@
 #include <pxr/usd/usdShade/materialBindingAPI.h>
 #include <pxr/usd/usdVol/openVDBAsset.h>
 #include <pxr/usd/usdVol/volume.h>
+#include <spdlog/spdlog.h>
 
 #include "GCore/Components/CurveComponent.h"
 #include "GCore/Components/InstancerComponent.h"
@@ -20,6 +21,103 @@
 #include "glm/gtx/matrix_decompose.hpp"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
+
+// ============================================================================
+// read_geometry_from_usd - 从 USD prim 读取几何数据到 Geometry
+// ============================================================================
+bool read_geometry_from_usd(
+    Geometry& geometry,
+    const pxr::UsdPrim& prim,
+    pxr::UsdTimeCode time)
+{
+    using namespace pxr;
+
+    if (!prim || !prim.IsA<UsdGeomMesh>()) {
+        spdlog::error(
+            "[read_geometry_from_usd] Prim is not a valid UsdGeomMesh");
+        return false;
+    }
+
+    UsdGeomMesh usd_mesh(prim);
+
+    // 创建或获取 MeshComponent
+    auto mesh_comp = geometry.get_component<MeshComponent>();
+    if (!mesh_comp) {
+        mesh_comp = std::make_shared<MeshComponent>(&geometry);
+        geometry.attach_component(mesh_comp);
+    }
+
+    auto mesh_view = mesh_comp->get_usd_view();
+
+    // 读取顶点数据
+    VtArray<GfVec3f> points;
+    if (usd_mesh.GetPointsAttr()) {
+        usd_mesh.GetPointsAttr().Get(&points, time);
+        mesh_view.set_vertices(points);
+    }
+
+    // 读取拓扑
+    VtArray<int> counts;
+    if (usd_mesh.GetFaceVertexCountsAttr()) {
+        usd_mesh.GetFaceVertexCountsAttr().Get(&counts, time);
+    }
+
+    VtArray<int> indices;
+    if (usd_mesh.GetFaceVertexIndicesAttr()) {
+        usd_mesh.GetFaceVertexIndicesAttr().Get(&indices, time);
+    }
+
+    if (!counts.empty() && !indices.empty()) {
+        mesh_view.set_face_topology(counts, indices);
+    }
+
+    // 读取法线
+    VtArray<GfVec3f> normals;
+    if (usd_mesh.GetNormalsAttr()) {
+        usd_mesh.GetNormalsAttr().Get(&normals, time);
+        mesh_view.set_normals(normals);
+    }
+
+    // 读取颜色
+    VtArray<GfVec3f> colors;
+    if (usd_mesh.GetDisplayColorAttr()) {
+        usd_mesh.GetDisplayColorAttr().Get(&colors, time);
+        mesh_view.set_display_colors(colors);
+    }
+
+    // 读取 UV 坐标
+    UsdGeomPrimvarsAPI primvar_api(usd_mesh);
+    auto uv_primvar = primvar_api.GetPrimvar(TfToken("UVMap"));
+    if (!uv_primvar) {
+        uv_primvar = primvar_api.GetPrimvar(TfToken("st"));
+    }
+    if (uv_primvar) {
+        VtArray<GfVec2f> uvs;
+        uv_primvar.Get(&uvs, time);
+        mesh_view.set_uv_coordinates(uvs);
+    }
+
+    // 读取 Transform (作为 Geometry 的 XformComponent)
+    GfMatrix4d xform_matrix = usd_mesh.ComputeLocalToWorldTransform(time);
+    if (xform_matrix != GfMatrix4d().SetIdentity()) {
+        auto xform_comp = geometry.get_component<XformComponent>();
+        if (!xform_comp) {
+            xform_comp = std::make_shared<XformComponent>(&geometry);
+            geometry.attach_component(xform_comp);
+        }
+
+        auto translation = xform_matrix.ExtractTranslation();
+        xform_comp->translation.clear();
+        xform_comp->translation.push_back(
+            glm::vec3(translation[0], translation[1], translation[2]));
+        xform_comp->rotation.push_back(glm::vec3(0.0f));  // TODO: 提取旋转
+        xform_comp->scale.push_back(glm::vec3(1.0f));     // TODO: 提取缩放
+    }
+
+    // TODO: 读取 Skeleton 数据（如果需要）
+
+    return true;
+}
 
 // Utility functions for ConstMeshUSDView
 static pxr::VtArray<pxr::GfVec3f> vec3f_array_to_vt_array(
@@ -129,17 +227,17 @@ bool write_geometry_to_usd(
                     normals_attr.Block();
                 }
             }
-            
+
             if (!mesh_usdview.get_display_colors().empty()) {
                 auto colorPrimvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken("displayColor"),
                     pxr::SdfValueTypeNames->Color3fArray);
-                
+
                 // Determine interpolation based on color count
                 size_t num_colors = mesh_usdview.get_display_colors().size();
                 size_t num_vertices = mesh_usdview.get_vertices().size();
                 size_t num_faces = mesh_usdview.get_face_vertex_counts().size();
-                
+
                 if (num_colors == num_vertices) {
                     colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
                 }
@@ -150,16 +248,17 @@ bool write_geometry_to_usd(
                     // Default to vertex interpolation
                     colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
                 }
-                
+
                 colorPrimvar.Set(mesh_usdview.get_display_colors(), time);
             }
             else {
-                auto colorPrimvar = primVarAPI.GetPrimvar(pxr::TfToken("displayColor"));
+                auto colorPrimvar =
+                    primVarAPI.GetPrimvar(pxr::TfToken("displayColor"));
                 if (colorPrimvar) {
                     colorPrimvar.GetAttr().Block();
                 }
             }
-            
+
             if (!mesh_usdview.get_uv_coordinates().empty()) {
                 auto primvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken("UVMap"),
@@ -204,8 +303,6 @@ bool write_geometry_to_usd(
                 primvar.SetInterpolation(pxr::UsdGeomTokens->uniform);
                 primvar.Set(values, time);
             }
-
-
 
             for (const std::string& name :
                  mesh->get_vertex_vector_quantity_names()) {
