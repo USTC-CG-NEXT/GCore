@@ -3,10 +3,6 @@
 import sys
 import os
 
-sys.path.append(r"C:\Users\Pengfei\WorkSpace\Ruzino\Binaries\Release")
-os.add_dll_directory(r"C:\Users\Pengfei\WorkSpace\Ruzino\SDK\python")
-os.add_dll_directory(r"C:\Users\Pengfei\WorkSpace\Ruzino\SDK\OpenUSD\Release\lib")
-
 import numpy as np
 import torch
 import geometry_py
@@ -212,11 +208,15 @@ def test_api_separation():
 def test_quantities():
     """Test scalar/vector/parameterization quantities"""
     print("\n[TEST] Quantities (scalar/vector/parameterization)...")
-    
-    vertices = [geometry_py.vec3(0, 0, 0), geometry_py.vec3(1, 0, 0), geometry_py.vec3(0, 1, 0)]
+
+    vertices = [
+        geometry_py.vec3(0, 0, 0),
+        geometry_py.vec3(1, 0, 0),
+        geometry_py.vec3(0, 1, 0),
+    ]
     triangle = geometry_py.create_mesh_from_arrays(vertices, [3], [0, 1, 2])
     mesh = triangle.get_mesh_component()
-    
+
     # Test scalar quantities
     vert_scalars = np.array([1.0, 2.0, 3.0], dtype=np.float32)
     mesh.set_vertex_scalar_quantity("test_vert", vert_scalars)
@@ -224,7 +224,7 @@ def test_quantities():
     assert np.allclose(result, vert_scalars)
     result[0] = 999.0  # In-place modification
     assert mesh.get_vertex_scalar_quantity("test_vert")[0] == 999.0
-    
+
     # Test vector quantities
     vert_vectors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float32)
     mesh.set_vertex_vector_quantity("test_vec", vert_vectors)
@@ -233,7 +233,7 @@ def test_quantities():
     assert np.allclose(result, vert_vectors)
     result[0, 0] = 888.0  # In-place modification
     assert mesh.get_vertex_vector_quantity("test_vec")[0, 0] == 888.0
-    
+
     # Test parameterization quantities
     vert_params = np.array([[0, 0], [1, 0], [0, 1]], dtype=np.float32)
     mesh.set_vertex_parameterization_quantity("uv", vert_params)
@@ -242,13 +242,13 @@ def test_quantities():
     assert np.allclose(result, vert_params)
     result[0, 0] = 0.5  # In-place modification
     assert mesh.get_vertex_parameterization_quantity("uv")[0, 0] == 0.5
-    
+
     # Test empty quantities
     empty = mesh.get_vertex_scalar_quantity("nonexistent")
     assert len(empty) == 0
     empty_vec = mesh.get_vertex_vector_quantity("nonexistent")
     assert empty_vec.shape == (0, 3)
-    
+
     print("  ✓ Scalar quantities (1D arrays)")
     print("  ✓ Vector quantities (Nx3 arrays)")
     print("  ✓ Parameterization quantities (Nx2 arrays)")
