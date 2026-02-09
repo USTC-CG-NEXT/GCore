@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <ctime>
 #include <memory>
 
 #include "GCore/Components/MeshComponent.h"

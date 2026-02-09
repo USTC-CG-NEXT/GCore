@@ -1,13 +1,27 @@
 #pragma once
 
-#include <Eigen/Eigen>
+#include <map>
 #include <string>
+#include <vector>
 
 #include "GCore/Components.h"
 #include "GCore/GOP.h"
-#include "MeshViews.h"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
+
+// Forward declarations for view types
+struct ConstMeshIGLView;
+struct MeshIGLView;
+#ifdef GEOM_USD_EXTENSION
+struct ConstMeshUSDView;
+struct MeshUSDView;
+#endif
+#if RUZINO_WITH_CUDA
+struct ConstMeshCUDAView;
+struct MeshCUDAView;
+#endif
+struct ConstMeshNVRHIView;
+struct MeshNVRHIView;
 
 struct GEOMETRY_API MeshComponent : public GeometryComponent {
     explicit MeshComponent(Geometry* attached_operand);
@@ -32,19 +46,6 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
         }
         return h;
     }
-
-    MeshIGLView get_igl_view();
-    ConstMeshIGLView get_igl_view() const;
-#ifdef GEOM_USD_EXTENSION
-    MeshUSDView get_usd_view();
-    ConstMeshUSDView get_usd_view() const;
-#endif
-#if RUZINO_WITH_CUDA
-    MeshCUDAView get_cuda_view();
-    ConstMeshCUDAView get_cuda_view() const;
-#endif
-    MeshNVRHIView get_nvrhi_view(nvrhi::IDevice* device);
-    ConstMeshNVRHIView get_nvrhi_view(nvrhi::IDevice* device) const;
 
     [[nodiscard]] const std::vector<glm::vec3>& get_vertices() const
     {

@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "GCore/Components/MeshComponent.h"
+#include "GCore/Components/MeshIGLView.h"  // Only need IGL view
 
 RUZINO_NAMESPACE_OPEN_SCOPE
 
@@ -18,7 +19,7 @@ Geometry delaunay(const Geometry& geometry, float maximum_radius)
         return Geometry::CreateMesh();
     }
 
-    auto input_view = input_mesh->get_igl_view();
+    auto input_view = get_igl_view(*input_mesh);
 
     // Get input vertices and project to 2D (use X,Y coordinates)
     Eigen::MatrixXf vertices_3d = input_view.get_vertices();
@@ -148,7 +149,7 @@ Geometry delaunay(const Geometry& geometry, float maximum_radius)
     // Create output geometry
     Geometry ret = Geometry::CreateMesh();
     auto ret_mesh = ret.get_component<MeshComponent>();
-    auto ret_view = ret_mesh->get_igl_view();
+    auto ret_view = get_igl_view(*ret_mesh);
 
     // Convert 2D vertices back to 3D (set Z = 0)
     Eigen::MatrixXf output_vertices_3d(output_vertices.rows(), 3);

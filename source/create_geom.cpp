@@ -1,5 +1,7 @@
 #include "GCore/create_geom.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
 #include <vector>

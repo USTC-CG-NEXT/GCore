@@ -1,4 +1,12 @@
+#include <GCore/Components/MeshIGLView.h>
+#include <GCore/Components/MeshNVRHIView.h>
 #include <GCore/Components/MeshViews.h>
+#ifdef GEOM_USD_EXTENSION
+#include <GCore/Components/MeshUSDView.h>
+#endif
+#if RUZINO_WITH_CUDA
+#include <GCore/Components/MeshCUDAView.h>
+#endif
 
 #include <set>
 #include <stdexcept>
@@ -323,14 +331,15 @@ std::vector<int> MeshIGLView::vector_to_int_array(const Eigen::VectorXi& vector)
     return array;
 }
 
-MeshIGLView MeshComponent::get_igl_view()
+// External API function implementations
+MeshIGLView get_igl_view(MeshComponent& mesh)
 {
-    return MeshIGLView(*this);
+    return MeshIGLView(mesh);
 }
 
-ConstMeshIGLView MeshComponent::get_igl_view() const
+ConstMeshIGLView get_igl_view(const MeshComponent& mesh)
 {
-    return ConstMeshIGLView(*this);
+    return ConstMeshIGLView(mesh);
 }
 #ifdef GEOM_USD_EXTENSION
 
@@ -581,14 +590,14 @@ std::vector<int> MeshUSDView::vt_array_to_int_array(
     return result;
 }
 
-MeshUSDView MeshComponent::get_usd_view()
+MeshUSDView get_usd_view(MeshComponent& mesh)
 {
-    return MeshUSDView(*this);
+    return MeshUSDView(mesh);
 }
 
-ConstMeshUSDView MeshComponent::get_usd_view() const
+ConstMeshUSDView get_usd_view(const MeshComponent& mesh)
 {
-    return ConstMeshUSDView(*this);
+    return ConstMeshUSDView(mesh);
 }
 
 #endif
@@ -897,14 +906,14 @@ void MeshCUDAView::set_face_corner_parameterization_quantity(
     modified_buffers_.insert(key);
 }
 
-MeshCUDAView MeshComponent::get_cuda_view()
+MeshCUDAView get_cuda_view(MeshComponent& mesh)
 {
-    return MeshCUDAView(*this);
+    return MeshCUDAView(mesh);
 }
 
-ConstMeshCUDAView MeshComponent::get_cuda_view() const
+ConstMeshCUDAView get_cuda_view(const MeshComponent& mesh)
 {
-    return ConstMeshCUDAView(*this);
+    return ConstMeshCUDAView(mesh);
 }
 #endif
 
@@ -1209,14 +1218,16 @@ void MeshNVRHIView::set_face_corner_parameterization_quantity(
     modified_buffers_.insert(key);
 }
 
-MeshNVRHIView MeshComponent::get_nvrhi_view(nvrhi::IDevice* device)
+MeshNVRHIView get_nvrhi_view(MeshComponent& mesh, nvrhi::IDevice* device)
 {
-    return MeshNVRHIView(*this, device);
+    return MeshNVRHIView(mesh, device);
 }
 
-ConstMeshNVRHIView MeshComponent::get_nvrhi_view(nvrhi::IDevice* device) const
+ConstMeshNVRHIView get_nvrhi_view(
+    const MeshComponent& mesh,
+    nvrhi::IDevice* device)
 {
-    return ConstMeshNVRHIView(*this, device);
+    return ConstMeshNVRHIView(mesh, device);
 }
 
 RUZINO_NAMESPACE_CLOSE_SCOPE

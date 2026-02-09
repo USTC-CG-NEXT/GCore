@@ -6,6 +6,10 @@
 #include <pxr/usd/usdGeom/points.h>
 #include <pxr/usd/usdGeom/primvarsAPI.h>
 #include <pxr/usd/usdShade/materialBindingAPI.h>
+#include <pxr/usd/usdSkel/bindingAPI.h>
+#include <pxr/usd/usdSkel/cache.h>
+#include <pxr/usd/usdSkel/skeleton.h>
+#include <pxr/usd/usdSkel/skeletonQuery.h>
 #include <pxr/usd/usdVol/openVDBAsset.h>
 #include <pxr/usd/usdVol/volume.h>
 #include <spdlog/spdlog.h>
@@ -14,14 +18,14 @@
 #include "GCore/Components/InstancerComponent.h"
 #include "GCore/Components/MaterialComponent.h"
 #include "GCore/Components/MeshComponent.h"
+#include "GCore/Components/MeshUSDView.h"  // Only need USD view
 #include "GCore/Components/PointsComponent.h"
+#include "GCore/Components/SkelComponent.h"
 #include "GCore/Components/VolumeComponent.h"
 #include "GCore/Components/XformComponent.h"
 #include "glm/gtc/type_ptr.hpp"
-#include "glm/gtx/matrix_decompose.hpp"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
-
 // ============================================================================
 // read_geometry_from_usd - 从 USD prim 读取几何数据到 Geometry
 // ============================================================================
@@ -47,7 +51,7 @@ bool read_geometry_from_usd(
         geometry.attach_component(mesh_comp);
     }
 
-    auto mesh_view = mesh_comp->get_usd_view();
+    auto mesh_view = get_usd_view(*mesh_comp);
 
     // 读取顶点数据
     VtArray<GfVec3f> points;
@@ -114,7 +118,46 @@ bool read_geometry_from_usd(
         xform_comp->scale.push_back(glm::vec3(1.0f));     // TODO: 提取缩放
     }
 
-    // TODO: 读取 Skeleton 数据（如果需要）
+    // 读取 Skeleton 数据
+    UsdSkelBindingAPI binding = UsdSkelBindingAPI(usd_mesh);
+    SdfPathVector targets;
+    binding.GetSkeletonRel().GetTargets(&targets);
+
+    if (targets.size() == 1) {
+        auto stage = prim.GetStage();
+        auto skel_prim = stage->GetPrimAtPath(targets[0]);
+        UsdSkelSkeleton skeleton(skel_prim);
+
+        if (skeleton) {
+            UsdSkelCache skelCache;
+            UsdSkelSkeletonQuery skelQuery = skelCache.GetSkelQuery(skeleton);
+
+            auto skel_component = geometry.get_component<SkelComponent>();
+            if (!skel_component) {
+                skel_component = std::make_shared<SkelComponent>(&geometry);
+                geometry.attach_component(skel_component);
+            }
+
+            VtArray<GfMatrix4f> xforms;
+            skelQuery.ComputeJointLocalTransforms(&xforms, time);
+
+            skel_component->localTransforms = xforms;
+            skel_component->jointOrder = skelQuery.GetJointOrder();
+            skel_component->topology = skelQuery.GetTopology();
+
+            VtArray<float> jointWeight;
+            binding.GetJointWeightsAttr().Get(&jointWeight, time);
+
+            VtArray<GfMatrix4d> bindTransforms;
+            skeleton.GetBindTransformsAttr().Get(&bindTransforms, time);
+            skel_component->bindTransforms = bindTransforms;
+
+            VtArray<int> jointIndices;
+            binding.GetJointIndicesAttr().Get(&jointIndices, time);
+            skel_component->jointWeight = jointWeight;
+            skel_component->jointIndices = jointIndices;
+        }
+    }
 
     return true;
 }
@@ -180,7 +223,7 @@ bool write_geometry_to_usd(
     }
 
     if (mesh) {
-        auto mesh_usdview = mesh->get_usd_view();
+        auto mesh_usdview = get_usd_view(*mesh);
         pxr::UsdGeomMesh usdgeom = pxr::UsdGeomMesh::Define(stage, actual_path);
 
         if (usdgeom) {

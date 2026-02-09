@@ -1,5 +1,8 @@
 #include "GCore/util_openmesh_bind.h"
 
+#include <unordered_map>
+#include <unordered_set>
+
 #include "GCore/Components/MeshComponent.h"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
@@ -251,12 +254,16 @@ namespace {
 inline uint64_t hash_triangle(int v0, int v1, int v2)
 {
     // Sort vertices to ensure consistent hashing
-    if (v0 > v1) std::swap(v0, v1);
-    if (v1 > v2) std::swap(v1, v2);
-    if (v0 > v1) std::swap(v0, v1);
+    if (v0 > v1)
+        std::swap(v0, v1);
+    if (v1 > v2)
+        std::swap(v1, v2);
+    if (v0 > v1)
+        std::swap(v0, v1);
 
     // Use a simple but effective hash: combine indices with shifts
-    return (static_cast<uint64_t>(v0) << 40) | (static_cast<uint64_t>(v1) << 20) | static_cast<uint64_t>(v2);
+    return (static_cast<uint64_t>(v0) << 40) |
+           (static_cast<uint64_t>(v1) << 20) | static_cast<uint64_t>(v2);
 }
 
 // Optimized tetrahedral reconstruction using hash maps
@@ -264,7 +271,8 @@ void fast_tetrahedral_reconstruction(
     const std::vector<std::array<int, 3>>& triangles,
     std::shared_ptr<OpenVolumeMesh::GeometricTetrahedralMeshV3d> volumemesh)
 {
-    if (triangles.size() < 4) return;
+    if (triangles.size() < 4)
+        return;
 
     // Pre-compute triangle hashes for O(1) lookup
     std::unordered_set<uint64_t> triangle_set;
@@ -286,7 +294,8 @@ void fast_tetrahedral_reconstruction(
     edge_to_triangles.reserve(triangles.size() * 3);
 
     auto encode_edge = [](int v1, int v2) -> uint64_t {
-        if (v1 > v2) std::swap(v1, v2);
+        if (v1 > v2)
+            std::swap(v1, v2);
         return (static_cast<uint64_t>(v1) << 32) | static_cast<uint64_t>(v2);
     };
 
@@ -300,7 +309,7 @@ void fast_tetrahedral_reconstruction(
 
     // Helper: Normalize triangle for hash comparison
     auto normalize_tri = [](int v0, int v1, int v2) -> std::array<int, 3> {
-        std::array<int, 3> tri = {v0, v1, v2};
+        std::array<int, 3> tri = { v0, v1, v2 };
         std::sort(tri.begin(), tri.end());
         return tri;
     };
@@ -320,7 +329,8 @@ void fast_tetrahedral_reconstruction(
                         const auto& adj_tri = triangles[adj_idx];
                         for (int k = 0; k < 3; ++k) {
                             int vertex = adj_tri[k];
-                            if (vertex != base_tri[j] && vertex != base_tri[(j + 1) % 3]) {
+                            if (vertex != base_tri[j] &&
+                                vertex != base_tri[(j + 1) % 3]) {
                                 candidate_vertices.push_back(vertex);
                             }
                         }
@@ -331,34 +341,41 @@ void fast_tetrahedral_reconstruction(
 
         // Remove duplicates from candidates
         std::sort(candidate_vertices.begin(), candidate_vertices.end());
-        candidate_vertices.erase(std::unique(candidate_vertices.begin(), candidate_vertices.end()), candidate_vertices.end());
+        candidate_vertices.erase(
+            std::unique(candidate_vertices.begin(), candidate_vertices.end()),
+            candidate_vertices.end());
 
         // Test each candidate for valid tetrahedron
         for (int fourth_vertex : candidate_vertices) {
             // Use original order for orientation preservation
-            std::array<int, 4> tet_verts = { base_tri[0], base_tri[1], base_tri[2], fourth_vertex };
-            
+            std::array<int, 4> tet_verts = {
+                base_tri[0], base_tri[1], base_tri[2], fourth_vertex
+            };
+
             // Compute hash for duplicate checking (use normalized version)
             auto sorted_tet = tet_verts;
             std::sort(sorted_tet.begin(), sorted_tet.end());
             uint64_t tet_hash = 0;
             for (int v : sorted_tet) {
-                tet_hash = tet_hash * 6364136223846793005ULL + static_cast<uint64_t>(v);
+                tet_hash = tet_hash * 6364136223846793005ULL +
+                           static_cast<uint64_t>(v);
             }
 
-            if (processed_tets.count(tet_hash)) continue;
+            if (processed_tets.count(tet_hash))
+                continue;
 
             // Verify all 4 faces exist in the triangle set
             bool valid_tet = true;
-            std::array<std::array<int, 3>, 4> faces = {{
-                {tet_verts[0], tet_verts[1], tet_verts[2]},
-                {tet_verts[0], tet_verts[1], tet_verts[3]},
-                {tet_verts[0], tet_verts[2], tet_verts[3]},
-                {tet_verts[1], tet_verts[2], tet_verts[3]}
-            }};
+            std::array<std::array<int, 3>, 4> faces = {
+                { { tet_verts[0], tet_verts[1], tet_verts[2] },
+                  { tet_verts[0], tet_verts[1], tet_verts[3] },
+                  { tet_verts[0], tet_verts[2], tet_verts[3] },
+                  { tet_verts[1], tet_verts[2], tet_verts[3] } }
+            };
 
             for (const auto& face : faces) {
-                if (triangle_set.find(hash_triangle(face[0], face[1], face[2])) == triangle_set.end()) {
+                if (triangle_set.find(hash_triangle(
+                        face[0], face[1], face[2])) == triangle_set.end()) {
                     valid_tet = false;
                     break;
                 }
@@ -372,9 +389,10 @@ void fast_tetrahedral_reconstruction(
                 for (int v : tet_verts) {
                     tet_handles.emplace_back(v);
                 }
-                
+
                 // Use permissive mode directly to avoid topology warnings
-                // Since tetrahedral meshes inherently have shared faces between adjacent cells
+                // Since tetrahedral meshes inherently have shared faces between
+                // adjacent cells
                 auto cell_handle = volumemesh->add_cell(tet_handles, false);
             }
         }
@@ -382,7 +400,8 @@ void fast_tetrahedral_reconstruction(
 }
 }  // namespace
 
-std::shared_ptr<VolumeMesh> operand_to_openvolumemesh(const Geometry* mesh_operand)
+std::shared_ptr<VolumeMesh> operand_to_openvolumemesh(
+    const Geometry* mesh_operand)
 {
     auto volumemesh = std::make_shared<VolumeMesh>();
     if (!mesh_operand)
@@ -502,18 +521,19 @@ std::shared_ptr<Geometry> openvolumemesh_to_operand(VolumeMesh* volumemesh)
     }
 
     // Extract cells as face_vertex data
-    // For volumetric meshes, represent each cell (e.g., tetrahedron) as a single entry
-    for (auto c_it = volumemesh->cells_begin(); 
-         c_it != volumemesh->cells_end(); 
+    // For volumetric meshes, represent each cell (e.g., tetrahedron) as a
+    // single entry
+    for (auto c_it = volumemesh->cells_begin(); c_it != volumemesh->cells_end();
          ++c_it) {
         std::vector<int> cell_verts;
-        
+
         // Iterate through cell vertices
         for (auto cv_it = volumemesh->cv_iter(*c_it); cv_it.valid(); ++cv_it) {
             cell_verts.push_back((*cv_it).idx());
         }
-        
-        // Add the cell as a single face with N vertices (e.g., 4 for tetrahedron)
+
+        // Add the cell as a single face with N vertices (e.g., 4 for
+        // tetrahedron)
         faceVertexCounts.push_back(static_cast<int>(cell_verts.size()));
         for (int vid : cell_verts) {
             faceVertexIndices.push_back(vid);

@@ -25,7 +25,7 @@ RUZINO_ADD_LIB(
 if(ENABLE_GEOM_USD_EXTENSION)
 	target_compile_definitions(geometry PUBLIC GEOM_USD_EXTENSION=1)
 	target_include_directories(geometry PUBLIC usd_extension/include)
-	target_link_libraries(geometry PUBLIC usd  usdVol hioOpenVDB usdShade usdSkel)
+	target_link_libraries(geometry PRIVATE usd usdVol hioOpenVDB usdShade usdSkel)
 endif()
 
 if(ENABLE_GPU_GEOM_ALGORITHM)

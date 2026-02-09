@@ -40,30 +40,29 @@ class GPUInterfaceTest : public ::testing::Test {
 TEST_F(GPUInterfaceTest, ViewLockPreventsMultipleViews)
 {
     {
-        auto view1 = mesh->get_igl_view();
+        auto view1 = get_igl_view(*mesh);
 
         // Try to create another view while the first is active
-        EXPECT_THROW(
-            { auto view2 = mesh->get_igl_view(); }, std::runtime_error);
+        EXPECT_THROW({ auto view2 = get_igl_view(*mesh); }, std::runtime_error);
     }
 
     // After first view is destroyed, should be able to create another
-    EXPECT_NO_THROW({ auto view3 = mesh->get_igl_view(); });
+    EXPECT_NO_THROW({ auto view3 = get_igl_view(*mesh); });
 }
 
 // Test 2: View lock works across different view types
 TEST_F(GPUInterfaceTest, ViewLockWorksAcrossViewTypes)
 {
     {
-        auto igl_view = mesh->get_igl_view();
+        auto igl_view = get_igl_view(*mesh);
 
         // Try to create a different type of view
         EXPECT_THROW(
-            { auto const_view = mesh->get_igl_view(); }, std::runtime_error);
+            { auto const_view = get_igl_view(*mesh); }, std::runtime_error);
 
 #ifdef GEOM_USD_EXTENSION
         EXPECT_THROW(
-            { auto usd_view = mesh->get_usd_view(); }, std::runtime_error);
+            { auto usd_view = get_usd_view(*mesh); }, std::runtime_error);
 #endif
     }
 }
@@ -71,7 +70,7 @@ TEST_F(GPUInterfaceTest, ViewLockWorksAcrossViewTypes)
 // Test 3: IGL View basic functionality
 TEST_F(GPUInterfaceTest, IGLViewBasicFunctionality)
 {
-    auto view = mesh->get_igl_view();
+    auto view = get_igl_view(*mesh);
 
     // Test get vertices
     auto vertices_matrix = view.get_vertices();
@@ -88,7 +87,7 @@ TEST_F(GPUInterfaceTest, IGLViewBasicFunctionality)
 TEST_F(GPUInterfaceTest, IGLViewModification)
 {
     {
-        auto view = mesh->get_igl_view();
+        auto view = get_igl_view(*mesh);
 
         // Modify vertices
         Eigen::MatrixXf new_vertices(3, 3);
@@ -111,7 +110,7 @@ TEST_F(GPUInterfaceTest, CUDAViewLazyLoading)
     Ruzino::cuda::cuda_init();
 
     {
-        auto view = mesh->get_cuda_view();
+        auto view = get_cuda_view(*mesh);
 
         // First access should create the buffer
         auto vertices_buffer = view.get_vertices();
@@ -130,7 +129,7 @@ TEST_F(GPUInterfaceTest, CUDAViewRAIISync)
     Ruzino::cuda::cuda_init();
 
     {
-        auto view = mesh->get_cuda_view();
+        auto view = get_cuda_view(*mesh);
 
         // Get buffer and create new data on GPU
         auto vertices_buffer = view.get_vertices();
@@ -165,7 +164,7 @@ TEST_F(GPUInterfaceTest, CUDAViewScalarQuantities)
     mesh->add_vertex_scalar_quantity("quality", quality);
 
     {
-        auto view = mesh->get_cuda_view();
+        auto view = get_cuda_view(*mesh);
 
         // Get the scalar quantity buffer
         auto quality_buffer = view.get_vertex_scalar_quantity("quality");
@@ -187,7 +186,7 @@ TEST_F(GPUInterfaceTest, ConstViewFromConstMesh)
 {
     const MeshComponent* const_mesh = mesh.get();
 
-    auto const_view = const_mesh->get_igl_view();
+    auto const_view = get_igl_view(*const_mesh);
 
     // Should be able to read data
     auto vertices = const_view.get_vertices();
@@ -200,7 +199,7 @@ TEST_F(GPUInterfaceTest, SequentialViews)
     // Create and destroy multiple views sequentially
     for (int i = 0; i < 5; ++i) {
         EXPECT_NO_THROW({
-            auto view = mesh->get_igl_view();
+            auto view = get_igl_view(*mesh);
             auto vertices = view.get_vertices();
             EXPECT_EQ(vertices.rows(), 3);
         });
@@ -216,7 +215,7 @@ TEST_F(GPUInterfaceTest, ViewVectorQuantities)
                                        { 0.0f, 0.0f, 1.0f } };
     mesh->set_normals(normals);
 
-    auto view = mesh->get_igl_view();
+    auto view = get_igl_view(*mesh);
     auto normals_matrix = view.get_normals();
 
     EXPECT_EQ(normals_matrix.rows(), 3);
@@ -234,7 +233,7 @@ TEST_F(GPUInterfaceTest, NVRHIViewLazyLoading)
     ASSERT_NE(device, nullptr);
 
     {
-        auto view = mesh->get_nvrhi_view(device);
+        auto view = get_nvrhi_view(*mesh, device);
 
         // First access should create the buffer (without commandList, buffer
         // created but not initialized)
@@ -261,7 +260,7 @@ TEST_F(GPUInterfaceTest, NVRHIViewWithCommandList)
     commandList->open();
 
     {
-        auto view = mesh->get_nvrhi_view(device);
+        auto view = get_nvrhi_view(*mesh, device);
 
         // Get buffer with commandList - should initialize data immediately
         auto vertices_buffer = view.get_vertices(commandList);
@@ -302,7 +301,7 @@ TEST_F(GPUInterfaceTest, NVRHIViewAllAttributes)
     commandList->open();
 
     {
-        auto view = mesh->get_nvrhi_view(device);
+        auto view = get_nvrhi_view(*mesh, device);
 
         // Get all buffers
         auto vertices_buf = view.get_vertices(commandList);
@@ -357,7 +356,7 @@ TEST_F(GPUInterfaceTest, NVRHIViewScalarQuantities)
     commandList->open();
 
     {
-        auto view = mesh->get_nvrhi_view(device);
+        auto view = get_nvrhi_view(*mesh, device);
 
         auto quality_buf =
             view.get_vertex_scalar_quantity("quality", commandList);
@@ -393,7 +392,7 @@ TEST_F(GPUInterfaceTest, NVRHIViewSettingBuffers)
     auto customBuffer = device->createBuffer(bufferDesc);
 
     {
-        auto view = mesh->get_nvrhi_view(device);
+        auto view = get_nvrhi_view(*mesh, device);
 
         // Set the buffer
         view.set_vertices(customBuffer);
@@ -414,15 +413,15 @@ TEST_F(GPUInterfaceTest, NVRHIViewLockMechanism)
     ASSERT_NE(device, nullptr);
 
     {
-        auto nvrhi_view = mesh->get_nvrhi_view(device);
+        auto nvrhi_view = get_nvrhi_view(*mesh, device);
 
         // Try to create another view while NVRHI view is active
         EXPECT_THROW(
-            { auto igl_view = mesh->get_igl_view(); }, std::runtime_error);
+            { auto igl_view = get_igl_view(*mesh); }, std::runtime_error);
     }
 
     // After NVRHI view is destroyed, should be able to create IGL view
-    EXPECT_NO_THROW({ auto igl_view = mesh->get_igl_view(); });
+    EXPECT_NO_THROW({ auto igl_view = get_igl_view(*mesh); });
 
     RHI::shutdown();
 }
@@ -445,7 +444,7 @@ TEST_F(GPUInterfaceTest, NVRHIViewVectorQuantities)
     commandList->open();
 
     {
-        auto view = mesh->get_nvrhi_view(device);
+        auto view = get_nvrhi_view(*mesh, device);
 
         auto velocity_buf =
             view.get_vertex_vector_quantity("velocity", commandList);

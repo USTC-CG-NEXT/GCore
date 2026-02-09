@@ -1,4 +1,5 @@
 #include <GCore/algorithms/intersection.h>
+#include <spdlog/spdlog.h>
 
 #include "GCore/Components/MeshComponent.h"
 #include "GCore/Components/PointsComponent.h"
