@@ -1,7 +1,7 @@
 add_subdirectory(external)
 
 
-option(ENABLE_GEOM_USD_EXTENSION "Enable USD extension for geometry module" OFF)
+option(ENABLE_GEOM_USD_EXTENSION "Enable USD extension for geometry module" ON)
 option(ENABLE_GPU_GEOM_ALGORITHM "Enable GPU-based geometry algorithms" OFF)
 
 if(ENABLE_GEOM_USD_EXTENSION)
