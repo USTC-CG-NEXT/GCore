@@ -5,6 +5,7 @@ Sets up paths and environment variables
 
 import sys
 import os
+import platform
 
 # Get binary directory
 binary_dir = os.path.join(
@@ -18,8 +19,25 @@ project_root = os.path.abspath(
 
 
 sys.path.append(binary_dir)
-os.add_dll_directory(project_root + r"\SDK\python")
-os.add_dll_directory(project_root + r"\SDK\OpenUSD\Release\lib")
+
+# os.add_dll_directory is Windows-specific
+if platform.system() == 'Windows':
+    os.add_dll_directory(project_root + r"\SDK\python")
+    os.add_dll_directory(project_root + r"\SDK\OpenUSD\Release\lib")
+else:
+    # Linux: Add USD Python bindings to path
+    usd_python_path = os.path.join(project_root, "SDK", "OpenUSD", "Debug", "lib", "python")
+    usd_lib_path = os.path.join(project_root, "SDK", "OpenUSD", "Debug", "lib")
+    if os.path.exists(usd_python_path):
+        sys.path.insert(0, usd_python_path)
+    # Preload USD shared libraries using ctypes (LD_LIBRARY_PATH doesn't work after process starts)
+    import ctypes
+    import glob
+    for so_file in glob.glob(os.path.join(usd_lib_path, "*.so")):
+        try:
+            ctypes.CDLL(so_file, mode=ctypes.RTLD_GLOBAL)
+        except OSError:
+            pass  # Some libraries may fail to load, that's OK
 # Set PXR_USD_WINDOWS_DLL_PATH so USD can find its DLLs
 os.environ["PXR_USD_WINDOWS_DLL_PATH"] = binary_dir
 print(f"Set PXR_USD_WINDOWS_DLL_PATH={binary_dir}")

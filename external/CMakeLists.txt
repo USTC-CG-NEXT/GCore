@@ -24,6 +24,7 @@ add_library(tetgen_geom STATIC
     ${TETGEN_SOURCE_DIR}/tetgen.h 
     ${TETGEN_SOURCE_DIR}/predicates.cxx)
 set_target_properties(tetgen_geom PROPERTIES ${OUTPUT_DIR})
+set_target_properties(tetgen_geom PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(tetgen_geom PUBLIC ${TETGEN_SOURCE_DIR})
 if(MSVC)
     target_compile_options(tetgen_geom PRIVATE /wd4477)

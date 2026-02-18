@@ -41,7 +41,7 @@ Geometry read_obj_geometry(const std::string& path)
 
     std::filesystem::path abs_path;
     if (!path.empty()) {
-        abs_path = std::filesystem::path(path);
+        abs_path = std::filesystem::path(p);
     }
     else {
         throw std::runtime_error("Path is empty.");

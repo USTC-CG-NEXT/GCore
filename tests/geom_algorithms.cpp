@@ -7,7 +7,7 @@
 #include "GCore/algorithms/intersection.h"
 #include "GCore/create_geom.h"
 
-#ifdef GPU_GEOM_ALGORITHM
+#if defined(GPU_GEOM_ALGORITHM) && RUZINO_WITH_OPENUSD
 
 #include <filesystem>
 
@@ -961,6 +961,13 @@ TEST_F(IntersectionTests, USDSceneIntersection)
             miss_printed++;
         }
     }
+}
+
+#else
+
+TEST(GeomAlgorithmsTest, DisabledWithoutOpenUSD)
+{
+    GTEST_SKIP() << "Test disabled: GPU_GEOM_ALGORITHM and/or OpenUSD not available";
 }
 
 #endif
