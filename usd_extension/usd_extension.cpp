@@ -23,6 +23,7 @@
 #include "GCore/Components/SkelComponent.h"
 #include "GCore/Components/VolumeComponent.h"
 #include "GCore/Components/XformComponent.h"
+#include "glm/glm.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
@@ -209,11 +210,14 @@ bool write_geometry_to_usd(
     const pxr::SdfPath& sdf_path,
     pxr::UsdTimeCode time)
 {
-    auto mesh = geometry.get_component<MeshComponent>();
-    auto points = geometry.get_component<PointsComponent>();
-    auto curve = geometry.get_component<CurveComponent>();
-    auto volume = geometry.get_component<VolumeComponent>();
-    auto instancer = geometry.get_component<InstancerComponent>();
+    Geometry geom_copy = geometry;
+    geom_copy.apply_transform();
+
+    auto mesh = geom_copy.get_component<MeshComponent>();
+    auto points = geom_copy.get_component<PointsComponent>();
+    auto curve = geom_copy.get_component<CurveComponent>();
+    auto volume = geom_copy.get_component<VolumeComponent>();
+    auto instancer = geom_copy.get_component<InstancerComponent>();
 
     assert(!(points && mesh));
 
@@ -570,31 +574,6 @@ bool write_geometry_to_usd(
             usdgeom.GetPrim().ApplyAPI(pxr::UsdShadeTokens->MaterialBindingAPI);
             pxr::UsdShadeMaterialBindingAPI(usdgeom).Bind(material);
         }
-    }
-
-    // Handle transforms
-    auto xform_component = geometry.get_component<XformComponent>();
-    auto usdgeom = pxr::UsdGeomXformable::Get(stage, actual_path);
-    auto xform_op = usdgeom.GetTransformOp();
-    if (!xform_op) {
-        xform_op = usdgeom.AddTransformOp();
-    }
-
-    if (xform_component) {
-        assert(
-            xform_component->translation.size() ==
-            xform_component->rotation.size());
-        glm::mat4 final_transform = xform_component->get_transform();
-        pxr::GfMatrix4d usd_transform;
-        const float* src = glm::value_ptr(final_transform);
-        double* dst = usd_transform.GetArray();
-        for (int i = 0; i < 16; ++i) {
-            dst[i] = static_cast<double>(src[i]);
-        }
-        xform_op.Set(usd_transform, time);
-    }
-    else {
-        xform_op.Set(pxr::GfMatrix4d().SetIdentity(), time);
     }
 
     pxr::UsdGeomImageable(stage->GetPrimAtPath(actual_path)).MakeVisible();

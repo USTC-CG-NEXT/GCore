@@ -27,28 +27,48 @@ Geometry create_grid(int resolution, float size)
     std::vector<int> faceVertexIndices;
     std::vector<int> faceVertexCounts;
 
-    for (int i = 0; i < resolution; ++i) {
-        for (int j = 0; j < resolution; ++j) {
-            float x =
-                size * static_cast<float>(i) / (resolution - 1) - size * 0.5f;
-            float y =
-                size * static_cast<float>(j) / (resolution - 1) - size * 0.5f;
+    std::vector<std::vector<int>> physicalToStorage(
+        resolution, std::vector<int>(resolution));
+    int idx = 0;
 
-            float u = static_cast<float>(i) / (resolution - 1);
-            float v = static_cast<float>(j) / (resolution - 1);
-            points.push_back(glm::vec3(x, y, 0));
-            texcoord.push_back(glm::vec2(u, v));
-            normals.push_back(glm::vec3(0.0f, 0.0f, 1.0f));
+    for (int j = 0; j < resolution; ++j) {
+        if (j % 2 == 0) {
+            for (int i = 0; i < resolution; ++i) {
+                float x = size * static_cast<float>(i) / (resolution - 1) -
+                          size * 0.5f;
+                float y = size * static_cast<float>(j) / (resolution - 1) -
+                          size * 0.5f;
+                float u = static_cast<float>(i) / (resolution - 1);
+                float v = static_cast<float>(j) / (resolution - 1);
+                points.push_back(glm::vec3(x, y, 0));
+                texcoord.push_back(glm::vec2(u, v));
+                normals.push_back(glm::vec3(0.0f, 0.0f, 1.0f));
+                physicalToStorage[i][j] = idx++;
+            }
+        }
+        else {
+            for (int i = resolution - 1; i >= 0; --i) {
+                float x = size * static_cast<float>(i) / (resolution - 1) -
+                          size * 0.5f;
+                float y = size * static_cast<float>(j) / (resolution - 1) -
+                          size * 0.5f;
+                float u = static_cast<float>(i) / (resolution - 1);
+                float v = static_cast<float>(j) / (resolution - 1);
+                points.push_back(glm::vec3(x, y, 0));
+                texcoord.push_back(glm::vec2(u, v));
+                normals.push_back(glm::vec3(0.0f, 0.0f, 1.0f));
+                physicalToStorage[i][j] = idx++;
+            }
         }
     }
 
-    for (int i = 0; i < resolution - 1; ++i) {
-        for (int j = 0; j < resolution - 1; ++j) {
+    for (int j = 0; j < resolution - 1; ++j) {
+        for (int i = 0; i < resolution - 1; ++i) {
             faceVertexCounts.push_back(4);
-            faceVertexIndices.push_back(i * resolution + j);
-            faceVertexIndices.push_back(i * resolution + j + 1);
-            faceVertexIndices.push_back((i + 1) * resolution + j + 1);
-            faceVertexIndices.push_back((i + 1) * resolution + j);
+            faceVertexIndices.push_back(physicalToStorage[i][j]);
+            faceVertexIndices.push_back(physicalToStorage[i + 1][j]);
+            faceVertexIndices.push_back(physicalToStorage[i + 1][j + 1]);
+            faceVertexIndices.push_back(physicalToStorage[i][j + 1]);
         }
     }
 
