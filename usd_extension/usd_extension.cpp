@@ -1,10 +1,15 @@
 #include <GCore/usd_extension.h>
 #include <pxr/base/gf/matrix4d.h>
+#include <pxr/usd/usdGeom/capsule.h>
+#include <pxr/usd/usdGeom/cone.h>
+#include <pxr/usd/usdGeom/cube.h>
 #include <pxr/usd/usdGeom/curves.h>
+#include <pxr/usd/usdGeom/cylinder.h>
 #include <pxr/usd/usdGeom/mesh.h>
 #include <pxr/usd/usdGeom/pointInstancer.h>
 #include <pxr/usd/usdGeom/points.h>
 #include <pxr/usd/usdGeom/primvarsAPI.h>
+#include <pxr/usd/usdGeom/sphere.h>
 #include <pxr/usd/usdShade/materialBindingAPI.h>
 #include <pxr/usd/usdSkel/bindingAPI.h>
 #include <pxr/usd/usdSkel/cache.h>
@@ -27,6 +32,358 @@
 #include "glm/gtc/type_ptr.hpp"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
+
+// Helper function to check if prim is a basic shape type that can be converted
+// to mesh
+static bool is_convertible_geom_shape(const pxr::UsdPrim& prim)
+{
+    using namespace pxr;
+    return prim.IsA<UsdGeomMesh>() || prim.IsA<UsdGeomSphere>() ||
+           prim.IsA<UsdGeomCylinder>() || prim.IsA<UsdGeomCone>() ||
+           prim.IsA<UsdGeomCube>() || prim.IsA<UsdGeomCapsule>();
+}
+
+bool generate_parametric_mesh(
+    const std::string& type_name,
+    const ParametricShapeParams& params,
+    pxr::VtArray<pxr::GfVec3f>& out_points,
+    pxr::VtArray<int>& out_face_counts,
+    pxr::VtArray<int>& out_face_indices,
+    pxr::VtArray<pxr::GfVec3f>& out_normals)
+{
+    using namespace pxr;
+    float radius = static_cast<float>(params.radius);
+    float height = static_cast<float>(params.height);
+    float size = static_cast<float>(params.size);
+
+    if (type_name == "Sphere" || type_name == "UsdGeomSphere") {
+        int segments = 16;
+        int rings = 8;
+
+        for (int ring = 0; ring <= rings; ++ring) {
+            float phi = M_PI * float(ring) / float(rings);
+            float y = cosf(phi) * radius;
+            float ring_radius = sinf(phi) * radius;
+
+            for (int seg = 0; seg <= segments; ++seg) {
+                float theta = 2.0f * M_PI * float(seg) / float(segments);
+                float x = cosf(theta) * ring_radius;
+                float z = sinf(theta) * ring_radius;
+                out_points.push_back(GfVec3f(x, y, z));
+                out_normals.push_back(
+                    GfVec3f(x / radius, y / radius, z / radius));
+            }
+        }
+
+        for (int ring = 0; ring < rings; ++ring) {
+            for (int seg = 0; seg < segments; ++seg) {
+                int first = ring * (segments + 1) + seg;
+                int second = first + segments + 1;
+
+                out_face_counts.push_back(3);
+                out_face_indices.push_back(first);
+                out_face_indices.push_back(second);
+                out_face_indices.push_back(first + 1);
+
+                out_face_counts.push_back(3);
+                out_face_indices.push_back(first + 1);
+                out_face_indices.push_back(second);
+                out_face_indices.push_back(second + 1);
+            }
+        }
+        return true;
+    }
+
+    if (type_name == "Cylinder" || type_name == "UsdGeomCylinder") {
+        float half_height = height / 2.0f;
+        int segments = 16;
+
+        int top_center_idx = 0;
+        int bottom_center_idx = 1;
+        out_points.push_back(GfVec3f(0, half_height, 0));
+        out_points.push_back(GfVec3f(0, -half_height, 0));
+        out_normals.push_back(GfVec3f(0, 1, 0));
+        out_normals.push_back(GfVec3f(0, -1, 0));
+
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, half_height, z));
+            out_normals.push_back(GfVec3f(0, 1, 0));
+        }
+
+        int bottom_ring_start = out_points.size();
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, -half_height, z));
+            out_normals.push_back(GfVec3f(0, -1, 0));
+        }
+
+        for (int seg = 0; seg < segments; ++seg) {
+            out_face_counts.push_back(3);
+            out_face_indices.push_back(top_center_idx);
+            out_face_indices.push_back(2 + seg);
+            out_face_indices.push_back(2 + seg + 1);
+        }
+
+        for (int seg = 0; seg < segments; ++seg) {
+            out_face_counts.push_back(3);
+            out_face_indices.push_back(bottom_center_idx);
+            out_face_indices.push_back(bottom_ring_start + seg + 1);
+            out_face_indices.push_back(bottom_ring_start + seg);
+        }
+
+        int side_top_start = out_points.size();
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, half_height, z));
+            out_normals.push_back(GfVec3f(x / radius, 0, z / radius));
+        }
+        int side_bottom_start = out_points.size();
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, -half_height, z));
+            out_normals.push_back(GfVec3f(x / radius, 0, z / radius));
+        }
+
+        for (int seg = 0; seg < segments; ++seg) {
+            out_face_counts.push_back(4);
+            out_face_indices.push_back(side_top_start + seg);
+            out_face_indices.push_back(side_bottom_start + seg);
+            out_face_indices.push_back(side_bottom_start + seg + 1);
+            out_face_indices.push_back(side_top_start + seg + 1);
+        }
+
+        return true;
+    }
+
+    if (type_name == "Cube" || type_name == "UsdGeomCube") {
+        float half = size / 2.0f;
+
+        out_points = { { -half, -half, -half }, { half, -half, -half },
+                       { half, half, -half },   { -half, half, -half },
+                       { -half, -half, half },  { half, -half, half },
+                       { half, half, half },    { -half, half, half } };
+
+        out_face_counts = { 4, 4, 4, 4, 4, 4 };
+        out_face_indices = { 0, 1, 2, 3, 5, 4, 7, 6, 4, 0, 3, 7,
+                             1, 5, 6, 2, 3, 2, 6, 7, 4, 5, 1, 0 };
+
+        out_normals = { { 0, 0, -1 }, { 0, 0, -1 }, { 0, 0, -1 }, { 0, 0, -1 },
+                        { 0, 0, 1 },  { 0, 0, 1 },  { 0, 0, 1 },  { 0, 0, 1 } };
+
+        return true;
+    }
+
+    if (type_name == "Cone" || type_name == "UsdGeomCone") {
+        float half_height = height / 2.0f;
+        int segments = 16;
+
+        int apex_idx = 0;
+        out_points.push_back(GfVec3f(0, half_height, 0));
+        out_normals.push_back(GfVec3f(0, 1, 0));
+
+        int bottom_center_idx = 1;
+        out_points.push_back(GfVec3f(0, -half_height, 0));
+        out_normals.push_back(GfVec3f(0, -1, 0));
+
+        int bottom_ring_start = out_points.size();
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, -half_height, z));
+            out_normals.push_back(GfVec3f(0, -1, 0));
+        }
+
+        for (int seg = 0; seg < segments; ++seg) {
+            out_face_counts.push_back(3);
+            out_face_indices.push_back(bottom_center_idx);
+            out_face_indices.push_back(bottom_ring_start + seg + 1);
+            out_face_indices.push_back(bottom_ring_start + seg);
+        }
+
+        for (int seg = 0; seg < segments; ++seg) {
+            float theta1 = 2.0f * M_PI * float(seg) / float(segments);
+            float theta2 = 2.0f * M_PI * float(seg + 1) / float(segments);
+
+            GfVec3f p1(
+                cosf(theta1) * radius, -half_height, sinf(theta1) * radius);
+            GfVec3f p2(
+                cosf(theta2) * radius, -half_height, sinf(theta2) * radius);
+            GfVec3f apex(0, half_height, 0);
+
+            GfVec3f edge1 = p1 - apex;
+            GfVec3f edge2 = p2 - apex;
+            GfVec3f normal = GfCross(edge1, edge2);
+            normal.Normalize();
+
+            int side_p1 = out_points.size();
+            out_points.push_back(GfVec3f(p1));
+            out_normals.push_back(normal);
+
+            int side_p2 = side_p1 + 1;
+            out_points.push_back(GfVec3f(p2));
+            out_normals.push_back(normal);
+
+            int side_apex = side_p2 + 1;
+            out_points.push_back(GfVec3f(apex));
+            out_normals.push_back(normal);
+
+            out_face_counts.push_back(3);
+            out_face_indices.push_back(side_p1);
+            out_face_indices.push_back(side_p2);
+            out_face_indices.push_back(side_apex);
+        }
+
+        return true;
+    }
+
+    if (type_name == "Capsule" || type_name == "UsdGeomCapsule") {
+        float half_height = height / 2.0f;
+        int segments = 16;
+
+        int top_center_idx = 0;
+        int bottom_center_idx = 1;
+        out_points.push_back(GfVec3f(0, half_height + radius, 0));
+        out_points.push_back(GfVec3f(0, -half_height - radius, 0));
+        out_normals.push_back(GfVec3f(0, 1, 0));
+        out_normals.push_back(GfVec3f(0, -1, 0));
+
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, half_height + radius, z));
+            out_normals.push_back(GfVec3f(0, 1, 0));
+        }
+
+        int bottom_ring_start = out_points.size();
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, -half_height - radius, z));
+            out_normals.push_back(GfVec3f(0, -1, 0));
+        }
+
+        for (int seg = 0; seg < segments; ++seg) {
+            out_face_counts.push_back(3);
+            out_face_indices.push_back(top_center_idx);
+            out_face_indices.push_back(2 + seg);
+            out_face_indices.push_back(2 + seg + 1);
+        }
+
+        for (int seg = 0; seg < segments; ++seg) {
+            out_face_counts.push_back(3);
+            out_face_indices.push_back(bottom_center_idx);
+            out_face_indices.push_back(bottom_ring_start + seg + 1);
+            out_face_indices.push_back(bottom_ring_start + seg);
+        }
+
+        int side_top_start = out_points.size();
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, half_height + radius, z));
+            out_normals.push_back(GfVec3f(x / radius, 0, z / radius));
+        }
+        int side_bottom_start = out_points.size();
+        for (int seg = 0; seg <= segments; ++seg) {
+            float theta = 2.0f * M_PI * float(seg) / float(segments);
+            float x = cosf(theta) * radius;
+            float z = sinf(theta) * radius;
+            out_points.push_back(GfVec3f(x, -half_height - radius, z));
+            out_normals.push_back(GfVec3f(x / radius, 0, z / radius));
+        }
+
+        for (int seg = 0; seg < segments; ++seg) {
+            out_face_counts.push_back(4);
+            out_face_indices.push_back(side_top_start + seg);
+            out_face_indices.push_back(side_bottom_start + seg);
+            out_face_indices.push_back(side_bottom_start + seg + 1);
+            out_face_indices.push_back(side_top_start + seg + 1);
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+static bool convert_shape_to_mesh(
+    const pxr::UsdPrim& prim,
+    pxr::UsdTimeCode time,
+    pxr::VtArray<pxr::GfVec3f>& out_points,
+    pxr::VtArray<int>& out_face_counts,
+    pxr::VtArray<int>& out_face_indices,
+    pxr::VtArray<pxr::GfVec3f>& out_normals)
+{
+    using namespace pxr;
+
+    if (prim.IsA<UsdGeomMesh>()) {
+        UsdGeomMesh mesh(prim);
+        mesh.GetPointsAttr().Get(&out_points, time);
+        mesh.GetFaceVertexCountsAttr().Get(&out_face_counts, time);
+        mesh.GetFaceVertexIndicesAttr().Get(&out_face_indices, time);
+        if (mesh.GetNormalsAttr()) {
+            mesh.GetNormalsAttr().Get(&out_normals, time);
+        }
+        return true;
+    }
+
+    ParametricShapeParams params;
+    std::string type_name;
+
+    if (prim.IsA<UsdGeomSphere>()) {
+        type_name = "Sphere";
+        UsdGeomSphere sphere(prim);
+        sphere.GetRadiusAttr().Get(&params.radius, time);
+    }
+    else if (prim.IsA<UsdGeomCylinder>()) {
+        type_name = "Cylinder";
+        UsdGeomCylinder cyl(prim);
+        cyl.GetRadiusAttr().Get(&params.radius, time);
+        cyl.GetHeightAttr().Get(&params.height, time);
+    }
+    else if (prim.IsA<UsdGeomCube>()) {
+        type_name = "Cube";
+        UsdGeomCube cube(prim);
+        cube.GetSizeAttr().Get(&params.size, time);
+    }
+    else if (prim.IsA<UsdGeomCone>()) {
+        type_name = "Cone";
+        UsdGeomCone cone(prim);
+        cone.GetRadiusAttr().Get(&params.radius, time);
+        cone.GetHeightAttr().Get(&params.height, time);
+    }
+    else if (prim.IsA<UsdGeomCapsule>()) {
+        type_name = "Capsule";
+        UsdGeomCapsule capsule(prim);
+        capsule.GetRadiusAttr().Get(&params.radius, time);
+        capsule.GetHeightAttr().Get(&params.height, time);
+    }
+    else {
+        return false;
+    }
+
+    return generate_parametric_mesh(
+        type_name,
+        params,
+        out_points,
+        out_face_counts,
+        out_face_indices,
+        out_normals);
+}
+
 // ============================================================================
 // read_geometry_from_usd - 从 USD prim 读取几何数据到 Geometry
 // ============================================================================
@@ -37,13 +394,32 @@ bool read_geometry_from_usd(
 {
     using namespace pxr;
 
-    if (!prim || !prim.IsA<UsdGeomMesh>()) {
-        spdlog::error(
-            "[read_geometry_from_usd] Prim is not a valid UsdGeomMesh");
+    if (!prim) {
+        spdlog::error("[read_geometry_from_usd] Invalid prim");
         return false;
     }
 
-    UsdGeomMesh usd_mesh(prim);
+    // Check if prim is a convertible geometry type
+    if (!is_convertible_geom_shape(prim)) {
+        spdlog::error(
+            "[read_geometry_from_usd] Prim '{}' is not a convertible geometry "
+            "type",
+            prim.GetPath().GetString());
+        return false;
+    }
+
+    // Convert shape to mesh data
+    VtArray<GfVec3f> points;
+    VtArray<int> face_counts;
+    VtArray<int> face_indices;
+    VtArray<GfVec3f> normals;
+
+    if (!convert_shape_to_mesh(
+            prim, time, points, face_counts, face_indices, normals)) {
+        spdlog::error(
+            "[read_geometry_from_usd] Failed to convert prim to mesh");
+        return false;
+    }
 
     // 创建或获取 MeshComponent
     auto mesh_comp = geometry.get_component<MeshComponent>();
@@ -54,109 +430,107 @@ bool read_geometry_from_usd(
 
     auto mesh_view = get_usd_view(*mesh_comp);
 
-    // 读取顶点数据
-    VtArray<GfVec3f> points;
-    if (usd_mesh.GetPointsAttr()) {
-        usd_mesh.GetPointsAttr().Get(&points, time);
+    // Set vertices
+    if (!points.empty()) {
         mesh_view.set_vertices(points);
     }
 
-    // 读取拓扑
-    VtArray<int> counts;
-    if (usd_mesh.GetFaceVertexCountsAttr()) {
-        usd_mesh.GetFaceVertexCountsAttr().Get(&counts, time);
+    // Set topology
+    if (!face_counts.empty() && !face_indices.empty()) {
+        mesh_view.set_face_topology(face_counts, face_indices);
     }
 
-    VtArray<int> indices;
-    if (usd_mesh.GetFaceVertexIndicesAttr()) {
-        usd_mesh.GetFaceVertexIndicesAttr().Get(&indices, time);
-    }
-
-    if (!counts.empty() && !indices.empty()) {
-        mesh_view.set_face_topology(counts, indices);
-    }
-
-    // 读取法线
-    VtArray<GfVec3f> normals;
-    if (usd_mesh.GetNormalsAttr()) {
-        usd_mesh.GetNormalsAttr().Get(&normals, time);
+    // Set normals
+    if (!normals.empty()) {
         mesh_view.set_normals(normals);
     }
 
-    // 读取颜色
+    // 读取颜色 (for mesh types)
     VtArray<GfVec3f> colors;
-    if (usd_mesh.GetDisplayColorAttr()) {
-        usd_mesh.GetDisplayColorAttr().Get(&colors, time);
-        mesh_view.set_display_colors(colors);
-    }
+    if (prim.IsA<UsdGeomMesh>()) {
+        UsdGeomMesh usd_mesh(prim);
+        if (usd_mesh.GetDisplayColorAttr()) {
+            usd_mesh.GetDisplayColorAttr().Get(&colors, time);
+            if (!colors.empty()) {
+                mesh_view.set_display_colors(colors);
+            }
+        }
 
-    // 读取 UV 坐标
-    UsdGeomPrimvarsAPI primvar_api(usd_mesh);
-    auto uv_primvar = primvar_api.GetPrimvar(TfToken("UVMap"));
-    if (!uv_primvar) {
-        uv_primvar = primvar_api.GetPrimvar(TfToken("st"));
-    }
-    if (uv_primvar) {
-        VtArray<GfVec2f> uvs;
-        uv_primvar.Get(&uvs, time);
-        mesh_view.set_uv_coordinates(uvs);
+        // 读取 UV 坐标
+        UsdGeomPrimvarsAPI primvar_api(usd_mesh);
+        auto uv_primvar = primvar_api.GetPrimvar(TfToken("UVMap"));
+        if (!uv_primvar) {
+            uv_primvar = primvar_api.GetPrimvar(TfToken("st"));
+        }
+        if (uv_primvar) {
+            VtArray<GfVec2f> uvs;
+            uv_primvar.Get(&uvs, time);
+            mesh_view.set_uv_coordinates(uvs);
+        }
     }
 
     // 读取 Transform (作为 Geometry 的 XformComponent)
-    GfMatrix4d xform_matrix = usd_mesh.ComputeLocalToWorldTransform(time);
-    if (xform_matrix != GfMatrix4d().SetIdentity()) {
-        auto xform_comp = geometry.get_component<XformComponent>();
-        if (!xform_comp) {
-            xform_comp = std::make_shared<XformComponent>(&geometry);
-            geometry.attach_component(xform_comp);
-        }
-
-        auto translation = xform_matrix.ExtractTranslation();
-        xform_comp->translation.clear();
-        xform_comp->translation.push_back(
-            glm::vec3(translation[0], translation[1], translation[2]));
-        xform_comp->rotation.push_back(glm::vec3(0.0f));  // TODO: 提取旋转
-        xform_comp->scale.push_back(glm::vec3(1.0f));     // TODO: 提取缩放
-    }
-
-    // 读取 Skeleton 数据
-    UsdSkelBindingAPI binding = UsdSkelBindingAPI(usd_mesh);
-    SdfPathVector targets;
-    binding.GetSkeletonRel().GetTargets(&targets);
-
-    if (targets.size() == 1) {
-        auto stage = prim.GetStage();
-        auto skel_prim = stage->GetPrimAtPath(targets[0]);
-        UsdSkelSkeleton skeleton(skel_prim);
-
-        if (skeleton) {
-            UsdSkelCache skelCache;
-            UsdSkelSkeletonQuery skelQuery = skelCache.GetSkelQuery(skeleton);
-
-            auto skel_component = geometry.get_component<SkelComponent>();
-            if (!skel_component) {
-                skel_component = std::make_shared<SkelComponent>(&geometry);
-                geometry.attach_component(skel_component);
+    UsdGeomXformable xformable(prim);
+    if (xformable) {
+        GfMatrix4d xform_matrix = xformable.ComputeLocalToWorldTransform(time);
+        if (xform_matrix != GfMatrix4d().SetIdentity()) {
+            auto xform_comp = geometry.get_component<XformComponent>();
+            if (!xform_comp) {
+                xform_comp = std::make_shared<XformComponent>(&geometry);
+                geometry.attach_component(xform_comp);
             }
 
-            VtArray<GfMatrix4f> xforms;
-            skelQuery.ComputeJointLocalTransforms(&xforms, time);
+            auto translation = xform_matrix.ExtractTranslation();
+            xform_comp->translation.clear();
+            xform_comp->translation.push_back(
+                glm::vec3(translation[0], translation[1], translation[2]));
+            xform_comp->rotation.push_back(glm::vec3(0.0f));  // TODO: 提取旋转
+            xform_comp->scale.push_back(glm::vec3(1.0f));     // TODO: 提取缩放
+        }
+    }
 
-            skel_component->localTransforms = xforms;
-            skel_component->jointOrder = skelQuery.GetJointOrder();
-            skel_component->topology = skelQuery.GetTopology();
+    // 读取 Skeleton 数据 (for mesh types)
+    if (prim.IsA<UsdGeomMesh>()) {
+        UsdGeomMesh usd_mesh(prim);
+        UsdSkelBindingAPI binding = UsdSkelBindingAPI(usd_mesh);
+        SdfPathVector targets;
+        binding.GetSkeletonRel().GetTargets(&targets);
 
-            VtArray<float> jointWeight;
-            binding.GetJointWeightsAttr().Get(&jointWeight, time);
+        if (targets.size() == 1) {
+            auto stage = prim.GetStage();
+            auto skel_prim = stage->GetPrimAtPath(targets[0]);
+            UsdSkelSkeleton skeleton(skel_prim);
 
-            VtArray<GfMatrix4d> bindTransforms;
-            skeleton.GetBindTransformsAttr().Get(&bindTransforms, time);
-            skel_component->bindTransforms = bindTransforms;
+            if (skeleton) {
+                UsdSkelCache skelCache;
+                UsdSkelSkeletonQuery skelQuery =
+                    skelCache.GetSkelQuery(skeleton);
 
-            VtArray<int> jointIndices;
-            binding.GetJointIndicesAttr().Get(&jointIndices, time);
-            skel_component->jointWeight = jointWeight;
-            skel_component->jointIndices = jointIndices;
+                auto skel_component = geometry.get_component<SkelComponent>();
+                if (!skel_component) {
+                    skel_component = std::make_shared<SkelComponent>(&geometry);
+                    geometry.attach_component(skel_component);
+                }
+
+                VtArray<GfMatrix4f> xforms;
+                skelQuery.ComputeJointLocalTransforms(&xforms, time);
+
+                skel_component->localTransforms = xforms;
+                skel_component->jointOrder = skelQuery.GetJointOrder();
+                skel_component->topology = skelQuery.GetTopology();
+
+                VtArray<float> jointWeight;
+                binding.GetJointWeightsAttr().Get(&jointWeight, time);
+
+                VtArray<GfMatrix4d> bindTransforms;
+                skeleton.GetBindTransformsAttr().Get(&bindTransforms, time);
+                skel_component->bindTransforms = bindTransforms;
+
+                VtArray<int> jointIndices;
+                binding.GetJointIndicesAttr().Get(&jointIndices, time);
+                skel_component->jointWeight = jointWeight;
+                skel_component->jointIndices = jointIndices;
+            }
         }
     }
 
@@ -179,13 +553,13 @@ static pxr::VtArray<pxr::GfVec2f> vec2f_array_to_vt_array(
         reinterpret_cast<const pxr::GfVec2f*>(array.data()),
         reinterpret_cast<const pxr::GfVec2f*>(array.data() + array.size()));
 }
+
 static pxr::VtArray<float> float_array_to_vt_array(
     const std::vector<float>& array)
 {
     return pxr::VtArray<float>(array.begin(), array.end());
 }
 
-// int
 static pxr::VtArray<int> int_array_to_vt_array(const std::vector<int>& array)
 {
     return pxr::VtArray<int>(array.begin(), array.end());
@@ -255,7 +629,8 @@ bool write_geometry_to_usd(
                     usdgeom.SetNormalsInterpolation(pxr::UsdGeomTokens->vertex);
                 }
                 else if (num_normals == num_face_vertices) {
-                    // One normal per face-vertex - faceVarying interpolation
+                    // One normal per face-vertex - faceVarying
+                    // interpolation
                     usdgeom.SetNormalsInterpolation(
                         pxr::UsdGeomTokens->faceVarying);
                 }
@@ -577,6 +952,194 @@ bool write_geometry_to_usd(
     }
 
     pxr::UsdGeomImageable(stage->GetPrimAtPath(actual_path)).MakeVisible();
+    return true;
+}
+
+// ============================================================================
+// Modifier Mode Implementation
+// ============================================================================
+
+pxr::SdfPath get_modifier_output_path(
+    const pxr::SdfPath& prim_path,
+    int modifier_index)
+{
+    std::string modifier_name = "modifier_" + std::to_string(modifier_index);
+    return prim_path.AppendPath(pxr::SdfPath("modifiers"))
+        .AppendPath(pxr::SdfPath(modifier_name));
+}
+
+bool write_geometry_as_over_spec(
+    const Geometry& geometry,
+    pxr::UsdStageRefPtr stage,
+    const pxr::SdfPath& sdf_path,
+    pxr::UsdTimeCode time,
+    pxr::SdfLayerHandle modifier_layer)
+{
+    using namespace pxr;
+
+    if (!modifier_layer) {
+        spdlog::error("[write_geometry_as_over_spec] Invalid modifier layer");
+        return false;
+    }
+
+    if (!stage) {
+        spdlog::error("[write_geometry_as_over_spec] Invalid stage");
+        return false;
+    }
+
+    if (sdf_path.IsEmpty()) {
+        spdlog::error("[write_geometry_as_over_spec] Empty sdf_path");
+        return false;
+    }
+
+    Geometry geom_copy = geometry;
+    geom_copy.apply_transform();
+
+    auto mesh = geom_copy.get_component<MeshComponent>();
+    if (!mesh) {
+        spdlog::error("[write_geometry_as_over_spec] No mesh component found");
+        return false;
+    }
+
+    auto mesh_usdview = get_usd_view(*mesh);
+
+    spdlog::debug(
+        "[MODIFIER] write_geometry_as_over_spec: Creating over spec at "
+        "'{}' in layer '{}'",
+        sdf_path.GetString(),
+        modifier_layer->GetIdentifier());
+
+    // Create the prim spec in the modifier layer (not root layer!)
+    // Use SdfJustCreatePrimInLayer to create prim hierarchy
+    if (!SdfJustCreatePrimInLayer(modifier_layer, sdf_path)) {
+        spdlog::error(
+            "[write_geometry_as_over_spec] Failed to create prim hierarchy at: "
+            "{}",
+            sdf_path.GetString());
+        return false;
+    }
+
+    // Now get the prim spec
+    SdfPrimSpecHandle prim_spec = modifier_layer->GetPrimAtPath(sdf_path);
+    if (!prim_spec) {
+        spdlog::error(
+            "[write_geometry_as_over_spec] Failed to get prim spec at: {}",
+            sdf_path.GetString());
+        return false;
+    }
+
+    spdlog::debug(
+        "[MODIFIER] Prim spec created, vertices count: {}, faces count: "
+        "{}",
+        mesh_usdview.get_vertices().size(),
+        mesh_usdview.get_face_vertex_counts().size());
+
+    // Set specifier to "over" (not "def") - this is the key for
+    // non-destructive editing
+    prim_spec->SetSpecifier(SdfSpecifierOver);
+
+    // Set the type name
+    prim_spec->SetTypeName(TfToken("Mesh"));
+
+    // Helper to set or update an attribute value
+    // Important: We must check if attribute already exists before creating
+    auto set_attribute_value = [&prim_spec, &modifier_layer, &time, &sdf_path](
+                                   const TfToken& attr_name,
+                                   const SdfValueTypeName& type_name,
+                                   const VtValue& value) -> bool {
+        // Build correct attribute path: /prim_path.attr_name
+        SdfPath attr_path = sdf_path.AppendProperty(attr_name);
+
+        // Check if attribute spec already exists in the layer
+        SdfAttributeSpecHandle attr_spec =
+            modifier_layer->GetAttributeAtPath(attr_path);
+
+        if (!attr_spec) {
+            // Create new attribute spec only if it doesn't exist
+            attr_spec = SdfAttributeSpec::New(
+                prim_spec, attr_name, type_name, SdfVariabilityVarying);
+            if (!attr_spec) {
+                spdlog::debug(
+                    "[MODIFIER] Failed to create attribute: {}",
+                    attr_name.GetString());
+                return false;
+            }
+        }
+
+        // Set the value (this updates existing spec)
+        attr_spec->SetDefaultValue(value);
+
+        // Also set time sample if not default time
+        if (time != UsdTimeCode::Default()) {
+            modifier_layer->SetTimeSample(
+                attr_spec->GetPath(), time.GetValue(), value);
+        }
+
+        return true;
+    };
+
+    // Write points
+    if (!mesh_usdview.get_vertices().empty()) {
+        set_attribute_value(
+            TfToken("points"),
+            SdfValueTypeNames->Point3fArray,
+            VtValue(mesh_usdview.get_vertices()));
+    }
+
+    // Write face topology
+    if (!mesh_usdview.get_face_vertex_counts().empty()) {
+        set_attribute_value(
+            TfToken("faceVertexCounts"),
+            SdfValueTypeNames->IntArray,
+            VtValue(mesh_usdview.get_face_vertex_counts()));
+    }
+
+    if (!mesh_usdview.get_face_vertex_indices().empty()) {
+        set_attribute_value(
+            TfToken("faceVertexIndices"),
+            SdfValueTypeNames->IntArray,
+            VtValue(mesh_usdview.get_face_vertex_indices()));
+    }
+
+    // Write normals
+    if (!mesh_usdview.get_normals().empty()) {
+        set_attribute_value(
+            TfToken("normals"),
+            SdfValueTypeNames->Vector3fArray,
+            VtValue(mesh_usdview.get_normals()));
+    }
+
+    // Note: primvars (UV, colors) are not written here because SdfAttributeSpec
+    // cannot handle namespaced names like "primvars:UVMap" directly.
+    // For full primvar support, we would need to use SdfPrimvarSpec API.
+    // For now, the over spec only overrides basic geometry (points, topology,
+    // normals). Primvars from the original prim will still be visible through
+    // composition.
+
+    spdlog::debug(
+        "[MODIFIER] Successfully wrote over spec to '{}', points: {}, "
+        "faces: {}",
+        sdf_path.GetString(),
+        mesh_usdview.get_vertices().size(),
+        mesh_usdview.get_face_vertex_counts().size());
+
+    // Debug: print first few points
+    const auto& verts = mesh_usdview.get_vertices();
+    if (!verts.empty()) {
+        spdlog::debug(
+            "[MODIFIER] First 3 points: ({}, {}, {}), ({}, {}, {}), ({}, "
+            "{}, {})",
+            verts[0][0],
+            verts[0][1],
+            verts[0][2],
+            verts.size() > 1 ? verts[1][0] : 0,
+            verts.size() > 1 ? verts[1][1] : 0,
+            verts.size() > 1 ? verts[1][2] : 0,
+            verts.size() > 2 ? verts[2][0] : 0,
+            verts.size() > 2 ? verts[2][1] : 0,
+            verts.size() > 2 ? verts[2][2] : 0);
+    }
+
     return true;
 }
 

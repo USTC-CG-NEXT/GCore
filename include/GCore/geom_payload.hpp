@@ -1,11 +1,15 @@
 #pragma once
 
+#include <glm/glm.hpp>
 #include <memory>
-#include <glm/vec3.hpp>
+#include <string>
+#include <vector>
 #ifdef GEOM_USD_EXTENSION
-#include <pxr/usd/usd/common.h>
+#include <pxr/usd/sdf/layer.h>
 #include <pxr/usd/sdf/path.h>
+#include <pxr/usd/usd/common.h>
 #endif
+
 struct PickEvent {
     glm::vec3 point;
     glm::vec3 normal;
@@ -40,6 +44,14 @@ struct GeomPayload {
     pxr::UsdStageRefPtr stage;
     pxr::UsdTimeCode current_time = pxr::UsdTimeCode(0);
     pxr::SdfPath prim_path;
+
+    // Modifier mode support (non-destructive layer composition)
+    bool is_modifier_mode = false;
+    pxr::SdfLayerHandle modifier_layer;
+    pxr::SdfPath modifier_output_path;
+    pxr::SdfPath modifier_input_path;  // Where input_geometry should read from
+    int current_modifier_index =
+        -1;  // Current modifier in stack (-1 = not in modifier mode)
 #endif
 
     std::shared_ptr<PickEvent> pick;
