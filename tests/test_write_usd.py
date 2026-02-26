@@ -50,14 +50,25 @@ def test_write_grid_to_usd():
     # Execute
     g.prepare_and_execute(inputs, required_node=write_node)
     
-    # Save the USD stage to file
+    # Save the USD stage to file (this also saves modifier layer)
     stage.save()
     
     # Verify the file was created
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
+    
+    # Check modifier layer file (where actual geometry data is stored)
+    modifier_file = "test_grid_modifiers.usdc"
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
-    assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
+    
+    if os.path.exists(modifier_file):
+        modifier_size = os.path.getsize(modifier_file)
+        print(f"✓ Modifier layer: {modifier_file} ({modifier_size} bytes)")
+        # Data is in modifier layer, check that instead
+        assert modifier_size > 1000, f"Modifier layer seems empty: {modifier_size} bytes"
+    else:
+        # Fallback: check main file if no modifier layer
+        assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
     
     print(f"✓ USD file verified (use 'usdcat {output_file}' to inspect)")
 
@@ -100,9 +111,19 @@ def test_write_uv_sphere_to_usd():
     
     # Verify
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
+    
+    # Check modifier layer file
+    modifier_file = "test_sphere_modifiers.usdc"
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
-    assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
+    
+    if os.path.exists(modifier_file):
+        modifier_size = os.path.getsize(modifier_file)
+        print(f"✓ Modifier layer: {modifier_file} ({modifier_size} bytes)")
+        assert modifier_size > 1000, f"Modifier layer seems empty: {modifier_size} bytes"
+    else:
+        assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
+    
     print(f"✓ UV sphere exported (use 'usdcat {output_file}' to inspect)")
 
 
@@ -143,9 +164,19 @@ def test_write_ico_sphere_to_usd():
     
     # Verify
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
+    
+    # Check modifier layer file
+    modifier_file = "test_ico_modifiers.usdc"
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
-    assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
+    
+    if os.path.exists(modifier_file):
+        modifier_size = os.path.getsize(modifier_file)
+        print(f"✓ Modifier layer: {modifier_file} ({modifier_size} bytes)")
+        assert modifier_size > 1000, f"Modifier layer seems empty: {modifier_size} bytes"
+    else:
+        assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
+    
     print(f"✓ Ico sphere exported (use 'usdcat {output_file}' to inspect)")
 
 

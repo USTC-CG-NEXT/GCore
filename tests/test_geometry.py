@@ -97,11 +97,11 @@ def test_create_triangle():
     assert len(verts) == 3, "Should have 3 vertices"
     
     # Add vertex colors
-    colors = [
-        geom.vec3(1.0, 0.0, 0.0),  # Red
-        geom.vec3(0.0, 1.0, 0.0),  # Green
-        geom.vec3(0.0, 0.0, 1.0),  # Blue
-    ]
+    colors = np.array([
+        [1.0, 0.0, 0.0],  # Red
+        [0.0, 1.0, 0.0],  # Green
+        [0.0, 0.0, 1.0],  # Blue
+    ], dtype=np.float32)
     mesh.set_display_color(colors)
     print(f"✓ Set vertex colors")
     
@@ -143,9 +143,8 @@ def test_create_quad():
     
     # Check bounds
     verts = mesh.get_vertices()
-    vert_array = np.array([[v.x, v.y, v.z] for v in verts])
-    assert np.allclose(vert_array.min(axis=0), [0, 0, 0]), "Min bound wrong"
-    assert np.allclose(vert_array.max(axis=0), [1, 1, 0]), "Max bound wrong"
+    assert np.allclose(verts.min(axis=0), [0, 0, 0]), "Min bound wrong"
+    assert np.allclose(verts.max(axis=0), [1, 1, 0]), "Max bound wrong"
     
     print("✓ Quad geometry verified")
 

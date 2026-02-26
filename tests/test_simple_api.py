@@ -3,8 +3,10 @@
 import sys
 import os
 
+import pytest
 import numpy as np
-import torch
+
+torch = pytest.importorskip("torch")
 import geometry_py
 
 

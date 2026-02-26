@@ -506,7 +506,19 @@ NB_MODULE(geometry_py, m)
         .def(
             "set_vertex_parameterization_quantities",
             &MeshComponent::set_vertex_parameterization_quantities)
-        .def("append_mesh", &MeshComponent::append_mesh);
+        .def("append_mesh", &MeshComponent::append_mesh)
+        .def(
+            "get_face_vertex_counts",
+            [](MeshComponent& self) -> std::vector<int> {
+                return self.get_face_vertex_counts();
+            },
+            "Get face vertex counts as list")
+        .def(
+            "get_face_vertex_indices",
+            [](MeshComponent& self) -> std::vector<int> {
+                return self.get_face_vertex_indices();
+            },
+            "Get face vertex indices as list");
 
     // PointsComponent
     nb::class_<PointsComponent, GeometryComponent>(m, "PointsComponent")

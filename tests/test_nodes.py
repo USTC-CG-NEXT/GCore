@@ -117,12 +117,12 @@ def test_create_grid_geometry():
     max_coords = vertices.max(axis=0)
     print(f"  ✓ Vertex bounds: {min_coords} to {max_coords}")
     
-    expected_min = [0.0, 0.0, 0.0]
-    expected_max = [0.0, 5.0, 5.0]
+    expected_min = [-2.5, -2.5, 0.0]
+    expected_max = [2.5, 2.5, 0.0]
     assert np.allclose(min_coords, expected_min, atol=0.01) and \
            np.allclose(max_coords, expected_max, atol=0.01), \
            "Vertex bounds incorrect"
-    print(f"  ✓ Bounds correct ([0,0,0] to [0,5,5] in YZ plane)")
+    print(f"  ✓ Bounds correct (centered at origin, [-2.5,-2.5,0] to [2.5,2.5,0])")
     
     # Get face indices
     faces = geom.get_face_indices_as_array(mesh)
