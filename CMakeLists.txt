@@ -30,7 +30,7 @@ endif()
 
 if(ENABLE_GPU_GEOM_ALGORITHM)
 	target_compile_definitions(geometry PUBLIC GPU_GEOM_ALGORITHM=1)
-	target_link_libraries(geometry PUBLIC GPUContext shaders_interface)
+	target_link_libraries(geometry PUBLIC GPUContext shaders_interface RHI)
 	target_link_libraries(geom_algorithms_test PRIVATE usdImagingGL)
 endif()
 

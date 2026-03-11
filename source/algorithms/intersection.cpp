@@ -6,6 +6,7 @@
 #include "GCore/Components/XformComponent.h"
 
 #ifdef GPU_GEOM_ALGORITHM
+#include "../../../../Core/RHI/source/shaderCompiler.h"
 #include "GPUContext/compute_context.hpp"
 #include "GPUContext/program_vars.hpp"
 #include "GPUContext/raytracing_context.hpp"
@@ -32,8 +33,13 @@ void init_gpu_geometry_algorithms()
     if (!shader_factory) {
         resource_allocator_.set_device(RHI::get_device());
         shader_factory = std::make_shared<ShaderFactory>();
-        shader_factory->add_search_path(RENDERER_SHADER_DIR "shaders");
-        shader_factory->add_search_path(GEOM_COMPUTE_SHADER_DIR);
+        shader_factory->add_search_path(
+            SlangShaderCompiler::get_shader_dir(ShaderDirType::Renderer)
+                .string() +
+            "/shaders");
+        shader_factory->add_search_path(
+            SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomNodes)
+                .string());
         resource_allocator_.shader_factory = shader_factory.get();
     }
 }
