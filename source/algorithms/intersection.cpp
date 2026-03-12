@@ -40,6 +40,9 @@ void init_gpu_geometry_algorithms()
         shader_factory->add_search_path(
             SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomNodes)
                 .string());
+        shader_factory->add_search_path(
+            SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomCompute)
+                .string());
         resource_allocator_.shader_factory = shader_factory.get();
     }
 }
@@ -250,7 +253,10 @@ nvrhi::BufferHandle IntersectToBuffer_Single(
 
     ProgramDesc desc;
     desc.shaderType = nvrhi::ShaderType::AllRayTracing;
-    desc.set_path(GEOM_COMPUTE_SHADER_DIR "intersection_single.slang");
+    desc.set_path(
+        (SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomCompute) /
+         "intersection_single.slang")
+            .string());
     auto program = resource_allocator.create(desc);
 
     // Create output buffer for intersection results
@@ -320,7 +326,10 @@ nvrhi::BufferHandle IntersectToBuffer(
 
     ProgramDesc desc;
     desc.shaderType = nvrhi::ShaderType::AllRayTracing;
-    desc.set_path(GEOM_COMPUTE_SHADER_DIR "intersection.slang");
+    desc.set_path(
+        (SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomCompute) /
+         "intersection.slang")
+            .string());
     auto program = resource_allocator.create(desc);
 
     // Create output buffer for intersection results
@@ -926,7 +935,11 @@ nvrhi::BufferHandle FindNeighborsFromPositionBuffer(
 
     // Compile and run toAABB compute shader
     ProgramDesc aabb_desc;
-    aabb_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/toAABB.slang")
+    aabb_desc
+        .set_path(
+            (SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomCompute) /
+             "Points/toAABB.slang")
+                .string())
         .set_entry_name("main")
         .set_shader_type(nvrhi::ShaderType::Compute);
 
@@ -1053,7 +1066,10 @@ nvrhi::BufferHandle FindNeighborsFromPositionBuffer(
     // Step 5: Run contact.slang ray tracing shader
     ProgramDesc contact_desc;
     contact_desc.shaderType = nvrhi::ShaderType::AllRayTracing;
-    contact_desc.set_path(GEOM_COMPUTE_SHADER_DIR "Points/contact.slang");
+    contact_desc.set_path(
+        (SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomCompute) /
+         "Points/contact.slang")
+            .string());
     auto contact_program = resource_allocator.create(contact_desc);
 
     if (!contact_program || !contact_program->getBufferPointer() ||

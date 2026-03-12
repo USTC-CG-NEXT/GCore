@@ -35,3 +35,6 @@ if(ENABLE_GPU_GEOM_ALGORITHM)
 endif()
 
 target_compile_definitions(geometry PRIVATE GEOM_COMPUTE_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/source/algorithms/CS/")
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/source/algorithms/CS/
+    DESTINATION bin/shaders/geom_compute
+    FILES_MATCHING PATTERN "*.slang")
