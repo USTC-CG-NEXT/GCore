@@ -10,6 +10,18 @@ torch = pytest.importorskip("torch")
 import geometry_py
 
 
+def _has_cuda_support():
+    vertices = [geometry_py.vec3(0, 0, 0)]
+    triangle = geometry_py.create_mesh_from_arrays(vertices, [1], [0])
+    mesh = triangle.get_mesh_component()
+    return hasattr(mesh, "get_cuda_view")
+
+
+requires_cuda = pytest.mark.skipif(
+    not _has_cuda_support(), reason="CUDA not enabled in this build"
+)
+
+
 def test_numpy_api():
     """Test MeshComponent with numpy arrays"""
     print("Testing MeshComponent numpy API...")
@@ -59,6 +71,7 @@ def test_numpy_api():
     print("✓ NumPy get/set methods work")
 
 
+@requires_cuda
 def test_torch_api():
     """Test CUDAView with torch tensors"""
     print("Testing CUDAView torch API...")
@@ -144,6 +157,7 @@ def test_numpy_inplace():
     print("✓ NumPy in-place modification works - no set() needed")
 
 
+@requires_cuda
 def test_torch_inplace():
     """Test in-place modification of torch tensors"""
     print("Testing PyTorch in-place modification...")
@@ -178,6 +192,7 @@ def test_torch_inplace():
     print("✓ PyTorch in-place modification works - no set() needed")
 
 
+@requires_cuda
 def test_api_separation():
     """Test that MeshComponent returns numpy and CUDAView returns torch"""
     print("Testing API type separation...")
