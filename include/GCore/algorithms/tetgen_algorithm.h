@@ -17,6 +17,10 @@ struct TetgenParams {
     bool conforming_delaunay =
         true;           // Use conforming Delaunay tetrahedralization
     bool quiet = true;  // Suppress tetgen output
+
+    // Attribute inheritance: if specified, this face scalar quantity from input
+    // will be preserved and inherited to subdivided faces in output
+    std::string preserve_face_attribute = "";
 };
 
 /// Generate tetrahedral mesh from a triangulated surface mesh using TetGen

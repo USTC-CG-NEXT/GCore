@@ -651,6 +651,7 @@ bool write_geometry_to_usd(
             }
 
             if (!mesh_usdview.get_display_colors().empty()) {
+                spdlog::warn("Writing displayColor");
                 auto colorPrimvar = primVarAPI.CreatePrimvar(
                     pxr::TfToken("displayColor"),
                     pxr::SdfValueTypeNames->Color3fArray);
@@ -1109,12 +1110,74 @@ bool write_geometry_as_over_spec(
             VtValue(mesh_usdview.get_normals()));
     }
 
-    // Note: primvars (UV, colors) are not written here because SdfAttributeSpec
-    // cannot handle namespaced names like "primvars:UVMap" directly.
-    // For full primvar support, we would need to use SdfPrimvarSpec API.
-    // For now, the over spec only overrides basic geometry (points, topology,
-    // normals). Primvars from the original prim will still be visible through
-    // composition.
+    // Write display colors as primvar
+    if (!mesh_usdview.get_display_colors().empty()) {
+        const TfToken attr_name("primvars:displayColor");
+        SdfPath attr_path = sdf_path.AppendProperty(attr_name);
+
+        SdfAttributeSpecHandle color_spec =
+            modifier_layer->GetAttributeAtPath(attr_path);
+        if (!color_spec) {
+            color_spec = SdfAttributeSpec::New(
+                prim_spec,
+                attr_name,
+                SdfValueTypeNames->Color3fArray,
+                SdfVariabilityVarying);
+        }
+        if (color_spec) {
+            size_t num_colors = mesh_usdview.get_display_colors().size();
+            size_t num_vertices = mesh_usdview.get_vertices().size();
+            size_t num_faces = mesh_usdview.get_face_vertex_counts().size();
+
+            TfToken interp = UsdGeomTokens->vertex;
+            if (num_colors == num_faces)
+                interp = UsdGeomTokens->uniform;
+
+            color_spec->SetInfo(TfToken("interpolation"), VtValue(interp));
+            color_spec->SetDefaultValue(
+                VtValue(mesh_usdview.get_display_colors()));
+            if (time != UsdTimeCode::Default()) {
+                modifier_layer->SetTimeSample(
+                    attr_path,
+                    time.GetValue(),
+                    VtValue(mesh_usdview.get_display_colors()));
+            }
+        }
+    }
+
+    // Write UV coordinates as primvar
+    if (!mesh_usdview.get_uv_coordinates().empty()) {
+        const TfToken attr_name("primvars:UVMap");
+        SdfPath attr_path = sdf_path.AppendProperty(attr_name);
+
+        SdfAttributeSpecHandle uv_spec =
+            modifier_layer->GetAttributeAtPath(attr_path);
+        if (!uv_spec) {
+            uv_spec = SdfAttributeSpec::New(
+                prim_spec,
+                attr_name,
+                SdfValueTypeNames->TexCoord2fArray,
+                SdfVariabilityVarying);
+        }
+        if (uv_spec) {
+            size_t num_uvs = mesh_usdview.get_uv_coordinates().size();
+            size_t num_vertices = mesh_usdview.get_vertices().size();
+
+            TfToken interp = (num_uvs == num_vertices)
+                                 ? UsdGeomTokens->vertex
+                                 : UsdGeomTokens->faceVarying;
+
+            uv_spec->SetInfo(TfToken("interpolation"), VtValue(interp));
+            uv_spec->SetDefaultValue(
+                VtValue(mesh_usdview.get_uv_coordinates()));
+            if (time != UsdTimeCode::Default()) {
+                modifier_layer->SetTimeSample(
+                    attr_path,
+                    time.GetValue(),
+                    VtValue(mesh_usdview.get_uv_coordinates()));
+            }
+        }
+    }
 
     spdlog::debug(
         "[MODIFIER] Successfully wrote over spec to '{}', points: {}, "

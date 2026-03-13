@@ -9,6 +9,7 @@
 #include "GCore/Components/CurveComponent.h"
 #include "GCore/Components/MeshComponent.h"
 #include "GCore/Components/PointsComponent.h"
+#include "GCore/GOP.h"
 #include "glm/geometric.hpp"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
@@ -1274,6 +1275,209 @@ Geometry create_double_tetrahedron(float size)
     mesh->set_face_vertex_indices(faceVertexIndices);
     mesh->set_face_vertex_counts(faceVertexCounts);
     mesh->set_texcoords_array(texcoord);
+
+    return geometry;
+}
+
+Geometry create_varying_star(
+    float star_factor,
+    float star_radius,
+    float width,
+    float height,
+    float depth)
+{
+    Geometry geometry;
+    std::shared_ptr<MeshComponent> mesh =
+        std::make_shared<MeshComponent>(&geometry);
+    geometry.attach_component(mesh);
+
+    std::vector<glm::vec3> points;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec2> texcoord;
+    std::vector<int> faceVertexIndices;
+    std::vector<int> faceVertexCounts;
+
+    const float PI = static_cast<float>(M_PI);
+    float halfWidth = width * 0.5f;
+    float halfHeight = height * 0.5f;
+
+    // Base equilateral triangle: A at top (90°), B at 210°, C at 330°
+    glm::vec3 tri[3];
+    for (int i = 0; i < 3; ++i) {
+        float angle = PI * 0.5f + i * 2.0f * PI / 3.0f;
+        tri[i] = glm::vec3(
+            star_radius * std::cos(angle), star_radius * std::sin(angle), 0.0f);
+    }
+
+    // For each side i (tri[i] → tri[(i+1)%3]):
+    //   L[i], R[i]: left/right base points of protrusion (side length =
+    //   star_factor) P[i]:       apex of protruding equilateral triangle
+    glm::vec3 Lpt[3], Rpt[3], Ppt[3];
+    // star_factor=1 → protrusion side = main_side / 3 (perfect hexagram)
+    // main triangle side length = star_radius * sqrt(3)
+    float protrusion_side = star_factor * star_radius * std::sqrt(3.0f) / 3.0f;
+
+    for (int i = 0; i < 3; ++i) {
+        glm::vec3 v0 = tri[i];
+        glm::vec3 v1 = tri[(i + 1) % 3];
+        glm::vec3 v2 = tri[(i + 2) % 3];  // opposite vertex
+        glm::vec3 mid = (v0 + v1) * 0.5f;
+        glm::vec3 d = glm::normalize(v1 - v0);
+
+        Lpt[i] = mid - d * (protrusion_side * 0.5f);
+        Rpt[i] = mid + d * (protrusion_side * 0.5f);
+
+        // Outward normal: rotate d by 90°, pointing away from opposite vertex
+        glm::vec3 n(-d.y, d.x, 0.0f);
+        if (glm::dot(n, mid - v2) < 0.0f)
+            n = -n;
+
+        Ppt[i] = mid + n * (protrusion_side * std::sqrt(3.0f) * 0.5f);
+    }
+
+    // Vertex layout:
+    //  [0,1,2]   = corners A, B, C
+    //  [3,4]     = L[0], R[0]  (side AB)
+    //  [5,6]     = L[1], R[1]  (side BC)
+    //  [7,8]     = L[2], R[2]  (side CA)
+    //  [9,10,11] = P[0], P[1], P[2]  (protrusion apices)
+    //  [12]      = center
+    auto addPt = [&](glm::vec3 p) {
+        points.push_back(p);
+        normals.push_back(glm::vec3(0.0f, 0.0f, 1.0f));
+        texcoord.push_back(
+            glm::vec2(
+                p.x / (2.0f * star_radius) + 0.5f,
+                p.y / (2.0f * star_radius) + 0.5f));
+    };
+
+    for (int i = 0; i < 3; ++i)
+        addPt(tri[i]);  // 0,1,2
+    for (int i = 0; i < 3; ++i) {
+        addPt(Lpt[i]);
+        addPt(Rpt[i]);
+    }  // 3-8
+    for (int i = 0; i < 3; ++i)
+        addPt(Ppt[i]);                   // 9,10,11
+    addPt(glm::vec3(0.0f, 0.0f, 0.0f));  // 12 = center
+
+    // Add 4 rectangle corners (top face at z=0)
+    addPt(glm::vec3(-halfWidth, -halfHeight, 0.0f));  // 13 = bottom-left
+    addPt(glm::vec3(halfWidth, -halfHeight, 0.0f));   // 14 = bottom-right
+    addPt(glm::vec3(halfWidth, halfHeight, 0.0f));    // 15 = top-right
+    addPt(glm::vec3(-halfWidth, halfHeight, 0.0f));   // 16 = top-left
+
+    // Add 4 rectangle corners (bottom face at z=-depth)
+    addPt(
+        glm::vec3(-halfWidth, -halfHeight, -depth));  // 17 = bottom-left-bottom
+    addPt(
+        glm::vec3(halfWidth, -halfHeight, -depth));  // 18 = bottom-right-bottom
+    addPt(glm::vec3(halfWidth, halfHeight, -depth));   // 19 = top-right-bottom
+    addPt(glm::vec3(-halfWidth, halfHeight, -depth));  // 20 = top-left-bottom
+
+    const int iA = 0, iB = 1, iC = 2;
+    const int iLA = 3, iRA = 4;  // side AB
+    const int iLB = 5, iRB = 6;  // side BC
+    const int iLC = 7, iRC = 8;  // side CA
+    const int iPA = 9, iPB = 10, iPC = 11;
+    const int iCtr = 12;
+    const int iBL = 13, iBR = 14, iTR = 15, iTL = 16;  // top rectangle corners
+    const int iBLB = 17, iBRB = 18, iTRB = 19,
+              iTLB = 20;  // bottom rectangle corners
+
+    // Track which faces belong to the star vs box (for surf_of_vol marker)
+    std::vector<float> surface_markers;
+
+    auto addTri = [&](int a, int b, int c, float marker) {
+        faceVertexCounts.push_back(3);
+        faceVertexIndices.push_back(a);
+        faceVertexIndices.push_back(b);
+        faceVertexIndices.push_back(c);
+        surface_markers.push_back(marker);
+    };
+
+    // 9 fan triangles from center — CCW order by angle from center:
+    // LC(~0°), RC(~60°), A(~90°), LA(~120°), RA(~180°), B(~210°), LB(~240°),
+    // RB(~300°), C(~330°)
+    addTri(iCtr, iLC, iRC, 1.0f);  // star face
+    addTri(iCtr, iRC, iA, 1.0f);   // star face
+    addTri(iCtr, iA, iLA, 1.0f);   // star face
+    addTri(iCtr, iLA, iRA, 1.0f);  // star face
+    addTri(iCtr, iRA, iB, 1.0f);   // star face
+    addTri(iCtr, iB, iLB, 1.0f);   // star face
+    addTri(iCtr, iLB, iRB, 1.0f);  // star face
+    addTri(iCtr, iRB, iC, 1.0f);   // star face
+    addTri(iCtr, iC, iLC, 1.0f);   // star face
+
+    // 3 protrusion triangles — CCW: L → P → R
+    addTri(iLA, iPA, iRA, 1.0f);  // star face
+    addTri(iLB, iPB, iRB, 1.0f);  // star face
+    addTri(iLC, iPC, iRC, 1.0f);  // star face
+
+    // 6 notch triangles — fill the concave indentations between arms and
+    // corners, making the outer boundary a hexagon: A → PA → B → PB → C → PC →
+    // A These are NOT part of the star, they're filler between star and outer
+    // hexagon
+    addTri(iA, iPA, iLA, 0.0f);  // notch face - left side of arm PA
+    addTri(iPA, iB, iRA, 0.0f);  // notch face - right side of arm PA
+    addTri(iB, iPB, iLB, 0.0f);  // notch face - left side of arm PB
+    addTri(iPB, iC, iRB, 0.0f);  // notch face - right side of arm PB
+    addTri(iC, iPC, iLC, 0.0f);  // notch face - left side of arm PC
+    addTri(iPC, iA, iRC, 0.0f);  // notch face - right side of arm PC
+
+    // Connect star outer boundary to rectangle corners (梯形条带方式)
+    // Star outer vertices按angle (CCW): PC(~30°), A(90°), PA(~150°), B(210°),
+    // PB(~270°), C(330°) Rectangle corners: TL(top-left), TR(top-right),
+    // BR(bottom-right), BL(bottom-left)
+
+    // Top edge (TL → TR): 梯形 TL-PA-A-PC-TR
+    addTri(iTL, iPA, iA, 0.0f);  // border face
+    addTri(iTL, iA, iTR, 0.0f);  // border face
+    addTri(iA, iPC, iTR, 0.0f);  // border face
+
+    // Right edge (TR → BR): 梯形 TR-PC-C-BR
+    addTri(iTR, iPC, iC, 0.0f);  // border face
+    addTri(iTR, iC, iBR, 0.0f);  // border face
+
+    // Bottom edge (BR → BL): 梯形 BR-C-PB-B-BL
+    addTri(iBR, iC, iPB, 0.0f);   // border face
+    addTri(iBR, iPB, iBL, 0.0f);  // border face
+    addTri(iPB, iB, iBL, 0.0f);   // border face
+
+    // Left edge (BL → TL): 梯形 BL-B-PA-TL
+    addTri(iBL, iB, iPA, 0.0f);   // border face
+    addTri(iBL, iPA, iTL, 0.0f);  // border face
+
+    // === Add side faces (4 rectangular sides of the box) ===
+    // Bottom side (BL-BR-BRB-BLB), normal pointing down (-Y)
+    addTri(iBL, iBR, iBRB, 0.0f);   // box side
+    addTri(iBL, iBRB, iBLB, 0.0f);  // box side
+
+    // Right side (BR-TR-TRB-BRB), normal pointing right (+X)
+    addTri(iBR, iTR, iTRB, 0.0f);   // box side
+    addTri(iBR, iTRB, iBRB, 0.0f);  // box side
+
+    // Top side (TR-TL-TLB-TRB), normal pointing up (+Y)
+    addTri(iTR, iTL, iTLB, 0.0f);   // box side
+    addTri(iTR, iTLB, iTRB, 0.0f);  // box side
+
+    // Left side (TL-BL-BLB-TLB), normal pointing left (-X)
+    addTri(iTL, iBL, iBLB, 0.0f);   // box side
+    addTri(iTL, iBLB, iTLB, 0.0f);  // box side
+
+    // === Add bottom face (rectangle at z=-depth) ===
+    // Bottom face normal pointing down (-Z), CCW from below
+    addTri(iBLB, iTLB, iTRB, 0.0f);  // box bottom
+    addTri(iBLB, iTRB, iBRB, 0.0f);  // box bottom
+
+    mesh->set_vertices(points);
+    mesh->set_normals(normals);
+    mesh->set_face_vertex_indices(faceVertexIndices);
+    mesh->set_face_vertex_counts(faceVertexCounts);
+    mesh->set_texcoords_array(texcoord);
+
+    // Add surface marker: 1.0 for star faces, 0.0 for border/box faces
+    mesh->add_face_scalar_quantity("star_region", surface_markers);
 
     return geometry;
 }

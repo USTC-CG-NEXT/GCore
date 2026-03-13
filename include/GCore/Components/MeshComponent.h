@@ -6,6 +6,7 @@
 
 #include "GCore/Components.h"
 #include "GCore/GOP.h"
+#include "spdlog/spdlog.h"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
 
@@ -69,6 +70,7 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
 
     [[nodiscard]] const std::vector<glm::vec3>& get_display_color() const
     {
+        spdlog::warn("Getting displayColor");
         return displayColor;
     }
 

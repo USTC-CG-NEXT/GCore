@@ -1,5 +1,6 @@
 #include "GCore/algorithms/tetgen_algorithm.h"
 
+#include <cmath>
 #include <iostream>
 
 #include "GCore/Components/MeshComponent.h"
@@ -27,6 +28,27 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
 
     if (vertices.empty() || indices.empty()) {
         throw std::runtime_error("Input mesh is empty");
+    }
+
+    // Check if we need to preserve face attributes
+    std::vector<float> input_face_attributes;
+    bool has_preserve_attribute = false;
+
+    if (!params.preserve_face_attribute.empty()) {
+        auto attr = mesh_component->get_face_scalar_quantity(
+            params.preserve_face_attribute);
+        if (!attr.empty()) {
+            if (attr.size() != face_counts.size()) {
+                throw std::runtime_error(
+                    "Face attribute size mismatch: " +
+                    params.preserve_face_attribute);
+            }
+            input_face_attributes = attr;
+            has_preserve_attribute = true;
+            spdlog::info(
+                "[TetGen] Preserving face attribute: {}",
+                params.preserve_face_attribute);
+        }
     }
 
     // Prepare TetGen input/output - use scope to ensure cleanup
@@ -79,7 +101,17 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
                 p.vertexlist[1] = indices[vertex_offset + 1];
                 p.vertexlist[2] = indices[vertex_offset + 2];
 
-                input.facetmarkerlist[face_idx] = 1;
+                // Set facet marker: use preserved attribute if available
+                if (has_preserve_attribute) {
+                    // Convert float attribute to integer marker
+                    // Scale by 1000 to preserve up to 3 decimal places
+                    input.facetmarkerlist[face_idx] = static_cast<int>(
+                        std::round(input_face_attributes[i] * 1000.0f));
+                }
+                else {
+                    input.facetmarkerlist[face_idx] = 1;
+                }
+
                 face_idx++;
             }
             vertex_offset += face_counts[i];
@@ -141,12 +173,17 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
         std::vector<int> output_indices;
         std::vector<int> output_face_counts;
         std::vector<float>
-            surface_markers;  // Non-zero = boundary face, zero = interior face
+            boundary_markers;  // 1.0 = boundary face, 0.0 = interior face
+        std::vector<float> preserved_attributes;  // Inherited from input
 
         if (output.numberoftrifaces > 0) {
             output_indices.reserve(output.numberoftrifaces * 3);
             output_face_counts.reserve(output.numberoftrifaces);
-            surface_markers.reserve(output.numberoftrifaces);
+            boundary_markers.reserve(output.numberoftrifaces);
+
+            if (has_preserve_attribute) {
+                preserved_attributes.reserve(output.numberoftrifaces);
+            }
 
             for (int i = 0; i < output.numberoftrifaces; ++i) {
                 // Get triangle vertices
@@ -157,12 +194,32 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
                 output_indices.push_back(tri[1]);
                 output_indices.push_back(tri[2]);
 
-                // Get surface marker (non-zero = boundary/surface face)
-                float marker =
-                    (output.trifacemarkerlist != nullptr)
-                        ? static_cast<float>(output.trifacemarkerlist[i])
-                        : 0.0f;
-                surface_markers.push_back(marker);
+                // Get marker from TetGen
+                int marker_int = (output.trifacemarkerlist != nullptr)
+                                     ? output.trifacemarkerlist[i]
+                                     : 0;
+
+                if (has_preserve_attribute) {
+                    // Preserved attribute: decode from marker
+                    // We need to distinguish between boundary markers and
+                    // preserved attributes TetGen sets marker to 0 for interior
+                    // faces For boundary faces, it uses the input
+                    // facetmarkerlist value
+                    if (marker_int == 0) {
+                        // Interior face - no preserved attribute
+                        preserved_attributes.push_back(0.0f);
+                        boundary_markers.push_back(0.0f);
+                    }
+                    else {
+                        // Boundary face - decode preserved attribute
+                        preserved_attributes.push_back(marker_int / 1000.0f);
+                        boundary_markers.push_back(1.0f);
+                    }
+                }
+                else {
+                    // Just use marker as boundary indicator
+                    boundary_markers.push_back(marker_int != 0 ? 1.0f : 0.0f);
+                }
             }
         }
 
@@ -171,8 +228,19 @@ Geometry tetrahedralize(const Geometry& geometry, const TetgenParams& params)
         output_mesh->set_face_vertex_indices(output_indices);
         output_mesh->set_face_vertex_counts(output_face_counts);
 
-        // Add surface marker as face scalar quantity
-        output_mesh->add_face_scalar_quantity("surf_of_vol", surface_markers);
+        // Add boundary marker as face scalar quantity (1.0 = boundary, 0.0 =
+        // interior)
+        output_mesh->add_face_scalar_quantity("boundary", boundary_markers);
+
+        // Add preserved attribute if it was requested
+        if (has_preserve_attribute) {
+            output_mesh->add_face_scalar_quantity(
+                params.preserve_face_attribute, preserved_attributes);
+            spdlog::info(
+                "[TetGen] Preserved attribute '{}' inherited to {} faces",
+                params.preserve_face_attribute,
+                preserved_attributes.size());
+        }
 
         // tetgenio destructors will clean up automatically
         return output_geometry;

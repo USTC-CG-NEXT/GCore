@@ -55,4 +55,11 @@ Geometry GEOMETRY_API
 create_subdivided_tetrahedron(int subdivisions, float size);
 Geometry GEOMETRY_API create_double_tetrahedron(float size);
 
+Geometry GEOMETRY_API create_varying_star(
+    float star_factor,
+    float star_radius,
+    float width,
+    float height,
+    float depth);
+
 RUZINO_NAMESPACE_CLOSE_SCOPE
