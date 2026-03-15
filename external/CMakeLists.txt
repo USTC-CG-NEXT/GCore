@@ -7,6 +7,16 @@ target_compile_definitions(glm INTERFACE GLM_ENABLE_EXPERIMENTAL)
 set_target_properties(glm PROPERTIES LINKER_LANGUAGE CXX)
 set_target_properties(glm PROPERTIES FOLDER "ThirdParty")
 
+# Install GLM headers (both .hpp and .inl files)
+install(DIRECTORY ${GLM_INCLUDE_DIR}
+    DESTINATION include
+    FILES_MATCHING
+    PATTERN "*.hpp"
+    PATTERN "*.inl"
+    PATTERN "*.h"
+    PATTERN "CMakeLists.txt" EXCLUDE
+)
+
 add_subdirectory(OpenMesh)
 set_target_properties(OpenMeshCore PROPERTIES FOLDER "external")
 set_target_properties(OpenMeshTools PROPERTIES FOLDER "external")

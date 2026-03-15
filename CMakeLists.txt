@@ -38,3 +38,12 @@ target_compile_definitions(geometry PRIVATE GEOM_COMPUTE_SHADER_DIR="${CMAKE_CUR
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/source/algorithms/CS/
     DESTINATION bin/shaders/geom_compute
     FILES_MATCHING PATTERN "*.slang")
+
+# Install usd_extension headers if enabled
+if(ENABLE_GEOM_USD_EXTENSION)
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/usd_extension/include/
+        DESTINATION include
+    PATTERN ".git" EXCLUDE
+    PATTERN "tests" EXCLUDE
+    )
+endif()
