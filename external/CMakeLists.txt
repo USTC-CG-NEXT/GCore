@@ -29,14 +29,17 @@ set_target_properties(igl_core PROPERTIES ${OUTPUT_DIR})
 
 # tetgen (reference from geometry_nodes)
 set(TETGEN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../geometry_nodes/tetgen")
-add_library(tetgen_geom STATIC 
-    ${TETGEN_SOURCE_DIR}/tetgen.cxx 
-    ${TETGEN_SOURCE_DIR}/tetgen.h 
+add_library(tetgen_geom STATIC
+    ${TETGEN_SOURCE_DIR}/tetgen.cxx
+    ${TETGEN_SOURCE_DIR}/tetgen.h
     ${TETGEN_SOURCE_DIR}/predicates.cxx)
 set_target_properties(tetgen_geom PROPERTIES ${OUTPUT_DIR})
 target_include_directories(tetgen_geom PUBLIC ${TETGEN_SOURCE_DIR})
 if(MSVC)
     target_compile_options(tetgen_geom PRIVATE /wd4477)
+else()
+    # On Linux, static libraries linked into shared libraries need -fPIC
+    target_compile_options(tetgen_geom PRIVATE -fPIC)
 endif()
 set_target_properties(tetgen_geom PROPERTIES FOLDER "ThirdParty")
 
