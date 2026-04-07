@@ -1,7 +1,8 @@
 #pragma once
 
-#include <string>
 #include <pxr/usd/usdShade/material.h>
+
+#include <string>
 
 #include "GCore/Components.h"
 #include "GCore/GOP.h"
@@ -21,7 +22,8 @@ struct GEOMETRY_API MaterialComponent : public GeometryComponent {
     {
         size_t h = 0;
         for (const auto& texture : textures) {
-            h ^= std::hash<std::string>{}(texture) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<std::string>{}(texture) + 0x9e3779b9 + (h << 6) +
+                 (h >> 2);
         }
         return h;
     }

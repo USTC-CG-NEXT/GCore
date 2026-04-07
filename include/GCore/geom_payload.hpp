@@ -1,10 +1,10 @@
 #pragma once
 
-#include <memory>
 #include <glm/vec3.hpp>
+#include <memory>
 #ifdef GEOM_USD_EXTENSION
-#include <pxr/usd/usd/common.h>
 #include <pxr/usd/sdf/path.h>
+#include <pxr/usd/usd/common.h>
 #endif
 struct PickEvent {
     glm::vec3 point;

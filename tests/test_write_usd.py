@@ -23,42 +23,42 @@ def test_write_grid_to_usd():
     print("\n" + "="*70)
     print("TEST: Write Grid to USD")
     print("="*70)
-    
+
     output_file = "test_grid.usdc"
-    
+
     g = RuzinoGraph("GridUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
-    
+
     grid_node = g.createNode("create_grid", name="grid")
     write_node = g.createNode("write_usd", name="writer")
-    
+
     g.addEdge(grid_node, "Geometry", write_node, "Geometry")
-    
+
     # Prepare inputs
     inputs = {
         (grid_node, "resolution"): 10,
         (grid_node, "size"): 5.0
     }
-    
+
     # Create Stage and convert to GeomPayload
     stage = stage_py.Stage(output_file)
     geom_payload = stage_py.create_payload_from_stage(stage, "/geom")
-    
+
     # Set global params
     g.setGlobalParams(geom_payload)
-    
+
     # Execute
     g.prepare_and_execute(inputs, required_node=write_node)
-    
+
     # Save the USD stage to file
     stage.save()
-    
+
     # Verify the file was created
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
     assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
-    
+
     print(f"✓ USD file verified (use 'usdcat {output_file}' to inspect)")
 
 
@@ -67,37 +67,37 @@ def test_write_uv_sphere_to_usd():
     print("\n" + "="*70)
     print("TEST: Write UV Sphere to USD")
     print("="*70)
-    
+
     output_file = "test_sphere.usdc"
-    
+
     g = RuzinoGraph("SphereUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
-    
+
     # Create UV sphere
     sphere = g.createNode("create_uv_sphere", name="sphere")
     write_node = g.createNode("write_usd", name="writer")
-    
+
     # Connect
     g.addEdge(sphere, "Geometry", write_node, "Geometry")
-    
+
     # Set up inputs
     inputs = {
         (sphere, "segments"): 32,
         (sphere, "rings"): 16,
         (sphere, "radius"): 1.5,
     }
-    
+
     # Create Stage and convert to GeomPayload
     stage = stage_py.Stage(output_file)
     geom_payload = stage_py.create_payload_from_stage(stage, "/geom")
     g.setGlobalParams(geom_payload)
-    
+
     # Execute
     g.prepare_and_execute(inputs, required_node=write_node)
-    
+
     # Save the stage
     stage.save()
-    
+
     # Verify
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
     file_size = os.path.getsize(output_file)
@@ -111,36 +111,36 @@ def test_write_ico_sphere_to_usd():
     print("\n" + "="*70)
     print("TEST: Write Ico Sphere to USD")
     print("="*70)
-    
+
     output_file = "test_ico.usdc"
-    
+
     g = RuzinoGraph("IcoUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
-    
+
     # Create ico sphere
     sphere = g.createNode("create_ico_sphere", name="ico")
     write_node = g.createNode("write_usd", name="writer")
-    
+
     # Connect
     g.addEdge(sphere, "Geometry", write_node, "Geometry")
-    
+
     # Set up inputs
     inputs = {
         (sphere, "subdivisions"): 3,
         (sphere, "radius"): 1.0,
     }
-    
+
     # Create Stage and convert to GeomPayload
     stage = stage_py.Stage(output_file)
     geom_payload = stage_py.create_payload_from_stage(stage, "/geom")
     g.setGlobalParams(geom_payload)
-    
+
     # Execute
     g.prepare_and_execute(inputs, required_node=write_node)
-    
+
     # Save the stage
     stage.save()
-    
+
     # Verify
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
     file_size = os.path.getsize(output_file)
@@ -154,18 +154,18 @@ if __name__ == "__main__":
         test_write_grid_to_usd()
         test_write_uv_sphere_to_usd()
         test_write_ico_sphere_to_usd()
-        
+
         print("\n" + "="*70)
         print("  ALL USD EXPORT TESTS PASSED! 🎉")
         print("="*70)
-        
+
         # List created files
         print("\n📁 Created USD files:")
         for f in ["test_grid.usdc", "test_sphere.usdc", "test_ico.usdc"]:
             if os.path.exists(f):
                 size = os.path.getsize(f)
                 print(f"  • {f} ({size} bytes)")
-        
+
     except Exception as e:
         print(f"\n✗ TEST FAILED: {e}")
         import traceback

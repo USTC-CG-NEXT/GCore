@@ -3,7 +3,6 @@
 #include "glm/gtx/matrix_decompose.hpp"
 #include "pxr/base/vt/array.h"
 
-
 RUZINO_NAMESPACE_OPEN_SCOPE
 InstancerComponent::InstancerComponent(Geometry* attached_operand)
     : GeometryComponent(attached_operand)
@@ -66,12 +65,12 @@ void InstancerComponent::add_instances(
     assert(scales.empty() || scales.size() == positions.size());
 
     positions_.insert(positions_.end(), positions.begin(), positions.end());
-    
+
     if (!orientations.empty()) {
         orientations_.insert(
             orientations_.end(), orientations.begin(), orientations.end());
     }
-    
+
     if (!scales.empty()) {
         scales_.insert(scales_.end(), scales.begin(), scales.end());
     }
@@ -82,7 +81,8 @@ void InstancerComponent::set_positions(const std::vector<glm::vec3>& positions)
     positions_ = positions;
 }
 
-void InstancerComponent::set_orientations(const std::vector<glm::quat>& orientations)
+void InstancerComponent::set_orientations(
+    const std::vector<glm::quat>& orientations)
 {
     assert(orientations.empty() || orientations.size() == positions_.size());
     orientations_ = orientations;

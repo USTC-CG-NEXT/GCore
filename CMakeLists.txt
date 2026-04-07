@@ -11,12 +11,12 @@ set(SKIP_LIST usd_extension)
 endif()
 
 RUZINO_ADD_LIB(
-	geometry 
+	geometry
 	SHARED
 	PUBLIC_LIBS OpenMeshCore spdlog::spdlog igl_core triangle::triangle glm::glm OpenVolumeMesh tetgen_geom
 	PYTHON_WRAP_DIR python
 	COMPILE_DEFS
-		NOMINMAX 
+		NOMINMAX
 		RUZINO_BACKEND_NVRHI
 	SKIP_DIRS
 	    external ${SKIP_LIST}

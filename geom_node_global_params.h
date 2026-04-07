@@ -2,7 +2,6 @@
 
 #include "GCore/api.h"
 
-
 RUZINO_NAMESPACE_OPEN_SCOPE
 struct PickEvent;
 struct GeomNodeGlobalParams {

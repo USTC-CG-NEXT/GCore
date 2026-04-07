@@ -26,7 +26,8 @@ struct GEOMETRY_API CurveComponent : public GeometryComponent {
             h ^= std::hash<int>{}(c) + 0x9e3779b9 + (h << 6) + (h >> 2);
         }
         h ^= std::hash<bool>{}(periodic) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<int>{}(static_cast<int>(curve_type)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(static_cast<int>(curve_type)) + 0x9e3779b9 +
+             (h << 6) + (h >> 2);
         return h;
     }
 
