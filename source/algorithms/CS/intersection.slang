@@ -67,7 +67,7 @@ void ClosestHit(
 
     // Use the bindless vertex buffer system to load vertex data
     float2 barycentrics = attribs.barycentrics;
-    
+
     VertexInfo vertex = get_interpolated_vertex(
         instanceID,
         primitiveIndex,

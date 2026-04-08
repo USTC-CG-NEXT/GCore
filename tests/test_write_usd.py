@@ -23,44 +23,44 @@ def test_write_grid_to_usd():
     print("\n" + "="*70)
     print("TEST: Write Grid to USD")
     print("="*70)
-    
+
     output_file = "test_grid.usdc"
-    
+
     g = RuzinoGraph("GridUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
-    
+
     grid_node = g.createNode("create_grid", name="grid")
     write_node = g.createNode("write_usd", name="writer")
-    
+
     g.addEdge(grid_node, "Geometry", write_node, "Geometry")
-    
+
     # Prepare inputs
     inputs = {
         (grid_node, "resolution"): 10,
         (grid_node, "size"): 5.0
     }
-    
+
     # Create Stage and convert to GeomPayload
     stage = stage_py.Stage(output_file)
     geom_payload = stage_py.create_payload_from_stage(stage, "/geom")
-    
+
     # Set global params
     g.setGlobalParams(geom_payload)
-    
+
     # Execute
     g.prepare_and_execute(inputs, required_node=write_node)
-    
+
     # Save the USD stage to file (this also saves modifier layer)
     stage.save()
-    
+
     # Verify the file was created
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
-    
+
     # Check modifier layer file (where actual geometry data is stored)
     modifier_file = "test_grid_modifiers.usdc"
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
-    
+
     if os.path.exists(modifier_file):
         modifier_size = os.path.getsize(modifier_file)
         print(f"✓ Modifier layer: {modifier_file} ({modifier_size} bytes)")
@@ -69,7 +69,7 @@ def test_write_grid_to_usd():
     else:
         # Fallback: check main file if no modifier layer
         assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
-    
+
     print(f"✓ USD file verified (use 'usdcat {output_file}' to inspect)")
 
 
@@ -78,52 +78,52 @@ def test_write_uv_sphere_to_usd():
     print("\n" + "="*70)
     print("TEST: Write UV Sphere to USD")
     print("="*70)
-    
+
     output_file = "test_sphere.usdc"
-    
+
     g = RuzinoGraph("SphereUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
-    
+
     # Create UV sphere
     sphere = g.createNode("create_uv_sphere", name="sphere")
     write_node = g.createNode("write_usd", name="writer")
-    
+
     # Connect
     g.addEdge(sphere, "Geometry", write_node, "Geometry")
-    
+
     # Set up inputs
     inputs = {
         (sphere, "segments"): 32,
         (sphere, "rings"): 16,
         (sphere, "radius"): 1.5,
     }
-    
+
     # Create Stage and convert to GeomPayload
     stage = stage_py.Stage(output_file)
     geom_payload = stage_py.create_payload_from_stage(stage, "/geom")
     g.setGlobalParams(geom_payload)
-    
+
     # Execute
     g.prepare_and_execute(inputs, required_node=write_node)
-    
+
     # Save the stage
     stage.save()
-    
+
     # Verify
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
-    
+
     # Check modifier layer file
     modifier_file = "test_sphere_modifiers.usdc"
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
-    
+
     if os.path.exists(modifier_file):
         modifier_size = os.path.getsize(modifier_file)
         print(f"✓ Modifier layer: {modifier_file} ({modifier_size} bytes)")
         assert modifier_size > 1000, f"Modifier layer seems empty: {modifier_size} bytes"
     else:
         assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
-    
+
     print(f"✓ UV sphere exported (use 'usdcat {output_file}' to inspect)")
 
 
@@ -132,51 +132,51 @@ def test_write_ico_sphere_to_usd():
     print("\n" + "="*70)
     print("TEST: Write Ico Sphere to USD")
     print("="*70)
-    
+
     output_file = "test_ico.usdc"
-    
+
     g = RuzinoGraph("IcoUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
-    
+
     # Create ico sphere
     sphere = g.createNode("create_ico_sphere", name="ico")
     write_node = g.createNode("write_usd", name="writer")
-    
+
     # Connect
     g.addEdge(sphere, "Geometry", write_node, "Geometry")
-    
+
     # Set up inputs
     inputs = {
         (sphere, "subdivisions"): 3,
         (sphere, "radius"): 1.0,
     }
-    
+
     # Create Stage and convert to GeomPayload
     stage = stage_py.Stage(output_file)
     geom_payload = stage_py.create_payload_from_stage(stage, "/geom")
     g.setGlobalParams(geom_payload)
-    
+
     # Execute
     g.prepare_and_execute(inputs, required_node=write_node)
-    
+
     # Save the stage
     stage.save()
-    
+
     # Verify
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
-    
+
     # Check modifier layer file
     modifier_file = "test_ico_modifiers.usdc"
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
-    
+
     if os.path.exists(modifier_file):
         modifier_size = os.path.getsize(modifier_file)
         print(f"✓ Modifier layer: {modifier_file} ({modifier_size} bytes)")
         assert modifier_size > 1000, f"Modifier layer seems empty: {modifier_size} bytes"
     else:
         assert file_size > 1000, f"USD file seems empty: {file_size} bytes"
-    
+
     print(f"✓ Ico sphere exported (use 'usdcat {output_file}' to inspect)")
 
 
@@ -185,18 +185,18 @@ if __name__ == "__main__":
         test_write_grid_to_usd()
         test_write_uv_sphere_to_usd()
         test_write_ico_sphere_to_usd()
-        
+
         print("\n" + "="*70)
         print("  ALL USD EXPORT TESTS PASSED! 🎉")
         print("="*70)
-        
+
         # List created files
         print("\n📁 Created USD files:")
         for f in ["test_grid.usdc", "test_sphere.usdc", "test_ico.usdc"]:
             if os.path.exists(f):
                 size = os.path.getsize(f)
                 print(f"  • {f} ({size} bytes)")
-        
+
     except Exception as e:
         print(f"\n✗ TEST FAILED: {e}")
         import traceback

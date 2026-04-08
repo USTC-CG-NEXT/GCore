@@ -253,9 +253,10 @@ TEST_F(GeometryHashTest, TestHashUniqueness)
 
         std::vector<glm::vec3> vertices;
         for (int j = 0; j < 3; ++j) {
-            vertices.push_back({ static_cast<float>(i + j),
-                                 static_cast<float>(i * 2 + j),
-                                 static_cast<float>(i + j * 2) });
+            vertices.push_back(
+                { static_cast<float>(i + j),
+                  static_cast<float>(i * 2 + j),
+                  static_cast<float>(i + j * 2) });
         }
         mesh->set_vertices(vertices);
 

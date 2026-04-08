@@ -1206,24 +1206,24 @@ TEST_F(OpenVolumeMeshBindTest, ActualFEMSolverIntegrationTest)
 
     // Test that we can extract all the information that FEMSolver3D needs
     bool integration_test_passed = true;
-    
+
     // Test 1: Basic mesh properties
     int n_vertices = volume_mesh->n_vertices();
     int n_cells = volume_mesh->n_cells();
-    
+
     EXPECT_GT(n_vertices, 0);
     EXPECT_GT(n_cells, 0);
-    
+
     // Test 2: Vertex iteration and boundary detection
     std::vector<bool> vertex_is_boundary(n_vertices, false);
     for (int vertex_id = 0; vertex_id < n_vertices; ++vertex_id) {
         auto vh = OpenVolumeMesh::VertexHandle(vertex_id);
-        
+
         if (!vh.is_valid()) {
             integration_test_passed = false;
             break;
         }
-        
+
         // Check boundary detection (exactly like FEMSolver3D does)
         for (auto vf_it = volume_mesh->vf_iter(vh); vf_it.valid(); ++vf_it) {
             if (volume_mesh->is_boundary(*vf_it)) {
@@ -1232,28 +1232,30 @@ TEST_F(OpenVolumeMeshBindTest, ActualFEMSolverIntegrationTest)
             }
         }
     }
-    
+
     // Test 3: Cell iteration and vertex extraction
-    for (auto c_it = volume_mesh->cells_begin(); c_it != volume_mesh->cells_end(); ++c_it) {
+    for (auto c_it = volume_mesh->cells_begin();
+         c_it != volume_mesh->cells_end();
+         ++c_it) {
         std::vector<int> cell_vertex_ids;
         std::vector<std::array<double, 3>> cell_coords;
-        
+
         for (auto cv_it = volume_mesh->cv_iter(*c_it); cv_it.valid(); ++cv_it) {
             if (!(*cv_it).is_valid()) {
                 integration_test_passed = false;
                 break;
             }
-            
+
             cell_vertex_ids.push_back((*cv_it).idx());
             auto point = volume_mesh->vertex(*cv_it);
-            cell_coords.push_back({point[0], point[1], point[2]});
+            cell_coords.push_back({ point[0], point[1], point[2] });
         }
-        
+
         if (cell_vertex_ids.size() != 4 || cell_coords.size() != 4) {
             integration_test_passed = false;
             break;
         }
-        
+
         // Test 4: Jacobian computation (mimicking FEMSolver3D)
         for (int vertex_id : cell_vertex_ids) {
             // Find vertex position in cell
@@ -1264,37 +1266,41 @@ TEST_F(OpenVolumeMeshBindTest, ActualFEMSolverIntegrationTest)
                     break;
                 }
             }
-            
+
             if (vertex_pos == -1) {
                 integration_test_passed = false;
                 break;
             }
-            
+
             // Compute tetrahedron volume (check for degeneracy)
             auto& v0 = cell_coords[0];
             auto& v1 = cell_coords[1];
             auto& v2 = cell_coords[2];
             auto& v3 = cell_coords[3];
-            
-            double d1x = v1[0] - v0[0], d1y = v1[1] - v0[1], d1z = v1[2] - v0[2];
-            double d2x = v2[0] - v0[0], d2y = v2[1] - v0[1], d2z = v2[2] - v0[2];
-            double d3x = v3[0] - v0[0], d3y = v3[1] - v0[1], d3z = v3[2] - v0[2];
-            
+
+            double d1x = v1[0] - v0[0], d1y = v1[1] - v0[1],
+                   d1z = v1[2] - v0[2];
+            double d2x = v2[0] - v0[0], d2y = v2[1] - v0[1],
+                   d2z = v2[2] - v0[2];
+            double d3x = v3[0] - v0[0], d3y = v3[1] - v0[1],
+                   d3z = v3[2] - v0[2];
+
             double det = d1x * (d2y * d3z - d2z * d3y) -
-                        d1y * (d2x * d3z - d2z * d3x) +
-                        d1z * (d2x * d3y - d2y * d3x);
-            
+                         d1y * (d2x * d3z - d2z * d3x) +
+                         d1z * (d2x * d3y - d2y * d3x);
+
             if (std::abs(det) < 1e-12) {
                 integration_test_passed = false;
                 break;
             }
         }
-        
-        if (!integration_test_passed) break;
+
+        if (!integration_test_passed)
+            break;
     }
-    
+
     EXPECT_TRUE(integration_test_passed);
-    
+
     // Test 5: Verify boundary vertices exist
     bool has_boundary_vertices = false;
     for (bool is_boundary : vertex_is_boundary) {
