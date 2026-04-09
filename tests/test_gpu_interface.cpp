@@ -228,7 +228,13 @@ TEST_F(GPUInterfaceTest, ViewVectorQuantities)
 // Test 11: NVRHI View lazy loading
 TEST_F(GPUInterfaceTest, NVRHIViewLazyLoading)
 {
-    RHI::init(false, true);
+    RHI::init(false,
+#ifdef _WIN32
+              true
+#else
+              false
+#endif
+    );
     auto device = RHI::get_device();
     ASSERT_NE(device, nullptr);
 
@@ -252,7 +258,13 @@ TEST_F(GPUInterfaceTest, NVRHIViewLazyLoading)
 // Test 12: NVRHI View with commandList initialization
 TEST_F(GPUInterfaceTest, NVRHIViewWithCommandList)
 {
-    RHI::init(false, true);
+    RHI::init(false,
+#ifdef _WIN32
+              true
+#else
+              false
+#endif
+    );
     auto device = RHI::get_device();
     ASSERT_NE(device, nullptr);
 
@@ -278,7 +290,13 @@ TEST_F(GPUInterfaceTest, NVRHIViewWithCommandList)
 // Test 13: NVRHI View all mesh attributes
 TEST_F(GPUInterfaceTest, NVRHIViewAllAttributes)
 {
-    RHI::init(false, true);
+    RHI::init(false,
+#ifdef _WIN32
+              true
+#else
+              false
+#endif
+    );
     auto device = RHI::get_device();
     ASSERT_NE(device, nullptr);
 
@@ -341,7 +359,13 @@ TEST_F(GPUInterfaceTest, NVRHIViewAllAttributes)
 // Test 14: NVRHI View scalar quantities
 TEST_F(GPUInterfaceTest, NVRHIViewScalarQuantities)
 {
-    RHI::init(false, true);
+    RHI::init(false,
+#ifdef _WIN32
+              true
+#else
+              false
+#endif
+    );
     auto device = RHI::get_device();
     ASSERT_NE(device, nullptr);
 
@@ -378,7 +402,13 @@ TEST_F(GPUInterfaceTest, NVRHIViewScalarQuantities)
 // Test 15: NVRHI View setting buffers
 TEST_F(GPUInterfaceTest, NVRHIViewSettingBuffers)
 {
-    RHI::init(false, true);
+    RHI::init(false,
+#ifdef _WIN32
+              true
+#else
+              false
+#endif
+    );
     auto device = RHI::get_device();
     ASSERT_NE(device, nullptr);
 
@@ -408,7 +438,13 @@ TEST_F(GPUInterfaceTest, NVRHIViewSettingBuffers)
 // Test 16: NVRHI View lock mechanism
 TEST_F(GPUInterfaceTest, NVRHIViewLockMechanism)
 {
-    RHI::init(false, true);
+    RHI::init(false,
+#ifdef _WIN32
+              true
+#else
+              false
+#endif
+    );
     auto device = RHI::get_device();
     ASSERT_NE(device, nullptr);
 
@@ -429,7 +465,13 @@ TEST_F(GPUInterfaceTest, NVRHIViewLockMechanism)
 // Test 17: NVRHI View vector quantities
 TEST_F(GPUInterfaceTest, NVRHIViewVectorQuantities)
 {
-    RHI::init(false, true);
+    RHI::init(false,
+#ifdef _WIN32
+              true
+#else
+              false
+#endif
+    );
     auto device = RHI::get_device();
     ASSERT_NE(device, nullptr);
 
