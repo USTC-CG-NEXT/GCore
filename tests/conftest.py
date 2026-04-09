@@ -18,8 +18,9 @@ project_root = os.path.abspath(
 
 
 sys.path.append(binary_dir)
-os.add_dll_directory(project_root + r"\SDK\python")
-os.add_dll_directory(project_root + r"\SDK\OpenUSD\Release\lib")
+if sys.platform == "win32":
+    os.add_dll_directory(project_root + r"\SDK\python")
+    os.add_dll_directory(project_root + r"\SDK\OpenUSD\Release\lib")
 # Set PXR_USD_WINDOWS_DLL_PATH so USD can find its DLLs
 os.environ["PXR_USD_WINDOWS_DLL_PATH"] = binary_dir
 print(f"Set PXR_USD_WINDOWS_DLL_PATH={binary_dir}")
