@@ -432,6 +432,9 @@ TEST_F(GPUInterfaceTest, NVRHIViewSettingBuffers)
         EXPECT_EQ(retrieved, customBuffer.Get());
     }
 
+    // Release all buffer references before RHI shutdown
+    customBuffer = nullptr;
+
     RHI::shutdown();
 }
 

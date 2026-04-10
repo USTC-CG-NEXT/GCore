@@ -258,6 +258,11 @@ nvrhi::BufferHandle IntersectToBuffer_Single(
          "intersection_single.slang")
             .string());
     auto program = resource_allocator.create(desc);
+    if (!program || !program->getBufferPointer()) {
+        spdlog::error("Failed to compile intersection_single.slang: {}",
+                      program ? program->get_error_string() : "program is null");
+        return {};
+    }
 
     // Create output buffer for intersection results
     auto result_buffer = resource_allocator.create(
@@ -331,8 +336,11 @@ nvrhi::BufferHandle IntersectToBuffer(
          "intersection.slang")
             .string());
     auto program = resource_allocator.create(desc);
-
-    // Create output buffer for intersection results
+    if (!program || !program->getBufferPointer()) {
+        spdlog::error("Failed to compile intersection.slang: {}",
+                      program ? program->get_error_string() : "program is null");
+        return {};
+    }
     auto result_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
             .setByteSize(ray_count * sizeof(PointSample))
