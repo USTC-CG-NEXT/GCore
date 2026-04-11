@@ -20,6 +20,7 @@
 
 RUZINO_NAMESPACE_OPEN_SCOPE
 ResourceAllocator resource_allocator_;
+
 std::shared_ptr<ShaderFactory> shader_factory;
 
 ResourceAllocator& get_resource_allocator()
@@ -263,6 +264,15 @@ nvrhi::BufferHandle IntersectToBuffer_Single(
                       program ? program->get_error_string() : "program is null");
         return {};
     }
+    spdlog::info("intersection_single.slang compiled OK, size={}, errors='{}'",
+                 program->getBufferSize(),
+                 program->get_error_string());
+
+    // Check for non-fatal warnings in the compiled program
+    auto err_str = program->get_error_string();
+    if (!err_str.empty()) {
+        spdlog::warn("Shader compilation warnings: {}", err_str);
+    }
 
     // Create output buffer for intersection results
     auto result_buffer = resource_allocator.create(
@@ -474,13 +484,11 @@ std::vector<PointSample> IntersectWithBuffer(
         return std::vector<PointSample>(ray_count);
     }
 
-    std::vector<PointSample> result;
-    result.resize(ray_count);
-
     // Create readback buffer
+    size_t sample_stride = sizeof(PointSample);
     auto readback_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
-            .setByteSize(ray_count * sizeof(PointSample))
+            .setByteSize(ray_count * sample_stride)
             .setCpuAccess(nvrhi::CpuAccessMode::Read)
             .setDebugName("resultReadbackBuffer"));
 
@@ -488,7 +496,7 @@ std::vector<PointSample> IntersectWithBuffer(
     auto commandlist = resource_allocator.create(CommandListDesc{});
     commandlist->open();
     commandlist->copyBuffer(
-        readback_buffer, 0, result_buffer, 0, ray_count * sizeof(PointSample));
+        readback_buffer, 0, result_buffer, 0, ray_count * sample_stride);
     commandlist->close();
     device->executeCommandList(commandlist);
     device->waitForIdle();
@@ -496,6 +504,7 @@ std::vector<PointSample> IntersectWithBuffer(
     // Map and read the results
     void* mapped_data =
         device->mapBuffer(readback_buffer, nvrhi::CpuAccessMode::Read);
+    std::vector<PointSample> result(ray_count);
     memcpy(result.data(), mapped_data, ray_count * sizeof(PointSample));
     device->unmapBuffer(readback_buffer);
 
@@ -553,10 +562,11 @@ std::vector<PointSample> IntersectWithScene(
     }
 
     // Read back results
+    size_t sample_stride = sizeof(PointSample);
     auto readback_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
-            .setByteSize(rays.size() * sizeof(PointSample))
-            .setStructStride(sizeof(PointSample))
+            .setByteSize(rays.size() * sample_stride)
+            .setStructStride(sample_stride)
             .setInitialState(nvrhi::ResourceStates::CopyDest)
             .setKeepInitialState(true)
             .setCpuAccess(nvrhi::CpuAccessMode::Read)
@@ -570,14 +580,14 @@ std::vector<PointSample> IntersectWithScene(
         0,
         result_buffer,
         0,
-        rays.size() * sizeof(PointSample));
+        rays.size() * sample_stride);
     commandlist->close();
     device->executeCommandList(commandlist);
     device->waitForIdle();
 
-    std::vector<PointSample> result(rays.size());
     void* readback_data =
         device->mapBuffer(readback_buffer, nvrhi::CpuAccessMode::Read);
+    std::vector<PointSample> result(rays.size());
     memcpy(result.data(), readback_data, rays.size() * sizeof(PointSample));
     device->unmapBuffer(readback_buffer);
 
@@ -868,13 +878,11 @@ std::vector<PointSample> IntersectContacts(
     auto& resource_allocator = get_resource_allocator();
     auto device = RHI::get_device();
 
-    std::vector<PointSample> result;
-    result.resize(contact_count);
-
     // Create readback buffer
+    size_t sample_stride = sizeof(PointSample);
     auto readback_buffer = resource_allocator.create(
         nvrhi::BufferDesc{}
-            .setByteSize(contact_count * sizeof(PointSample))
+            .setByteSize(contact_count * sample_stride)
             .setCpuAccess(nvrhi::CpuAccessMode::Read)
             .setInitialState(nvrhi::ResourceStates::CopyDest)
             .setKeepInitialState(true)
@@ -888,7 +896,7 @@ std::vector<PointSample> IntersectContacts(
         0,
         contact_buffer,
         0,
-        contact_count * sizeof(PointSample));
+        contact_count * sample_stride);
     commandlist->close();
     device->executeCommandList(commandlist);
     device->waitForIdle();
@@ -896,6 +904,7 @@ std::vector<PointSample> IntersectContacts(
     // Map and read the results
     void* mapped_data =
         device->mapBuffer(readback_buffer, nvrhi::CpuAccessMode::Read);
+    std::vector<PointSample> result(contact_count);
     memcpy(result.data(), mapped_data, contact_count * sizeof(PointSample));
     device->unmapBuffer(readback_buffer);
 
