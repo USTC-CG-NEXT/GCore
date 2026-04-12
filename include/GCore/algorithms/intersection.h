@@ -9,13 +9,13 @@
 namespace glm {
 struct ray {
     glm::vec3 origin;
-    float tmin = 0.0f;
     glm::vec3 direction;
+    float tmin = 0.0f;
     float tmax = 1e30f;  // Large number for "infinite" rays
 
     ray() = default;
     ray(glm::vec3 o, glm::vec3 d, float mn = 0.0f, float mx = 1e30f)
-        : origin(o), tmin(mn), direction(d), tmax(mx) {}
+        : origin(o), direction(d), tmin(mn), tmax(mx) {}
 };
 }  // namespace glm
 #ifdef GPU_GEOM_ALGORITHM
@@ -27,12 +27,9 @@ struct MeshDesc;
 
 struct GEOMETRY_API PointSample {
     glm::vec3 position;
-    float _pad0;
     glm::vec3 normal;
-    float _pad1;
     glm::vec2 uv;
     unsigned valid;
-    float _pad2;
 };
 
 struct GEOMETRY_API PointPairs {
