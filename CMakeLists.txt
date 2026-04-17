@@ -31,7 +31,7 @@ endif()
 if(ENABLE_GPU_GEOM_ALGORITHM)
 	target_compile_definitions(geometry PUBLIC GPU_GEOM_ALGORITHM=1)
 	target_link_libraries(geometry PUBLIC GPUContext shaders_interface RHI)
-	target_link_libraries(geom_algorithms_test PRIVATE usd_ms)
+	target_link_libraries(geom_algorithms_test PRIVATE usd_ms OpenGL32)
 endif()
 
 target_compile_definitions(geometry PRIVATE GEOM_COMPUTE_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/source/algorithms/CS/")
