@@ -19,7 +19,7 @@ struct ray {
 };
 }  // namespace glm
 #ifdef GPU_GEOM_ALGORITHM
-#include "RHI/ResourceManager/resource_allocator.hpp"
+#include "gpu_geometry.h"
 #endif
 
 RUZINO_NAMESPACE_OPEN_SCOPE
@@ -38,12 +38,6 @@ struct GEOMETRY_API PointPairs {
 };
 
 #ifdef GPU_GEOM_ALGORITHM
-
-GEOMETRY_API void init_gpu_geometry_algorithms();
-GEOMETRY_API void deinit_gpu_geometry_algorithms();
-// Remember to destroy the geometry explicitly with the resource allocator after
-// use.
-GEOMETRY_API ResourceAllocator& get_resource_allocator();
 
 GEOMETRY_API nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     const Geometry& geometry,

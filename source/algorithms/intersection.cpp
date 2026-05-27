@@ -6,7 +6,7 @@
 #include "GCore/Components/XformComponent.h"
 
 #ifdef GPU_GEOM_ALGORITHM
-#include "../../../../Core/RHI/source/shaderCompiler.h"
+#include "RHI/shaderCompiler.h"
 #include "GPUContext/compute_context.hpp"
 #include "GPUContext/program_vars.hpp"
 #include "GPUContext/raytracing_context.hpp"
@@ -19,40 +19,6 @@
 #include "nvrhi/nvrhi.h"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
-ResourceAllocator resource_allocator_;
-
-std::shared_ptr<ShaderFactory> shader_factory;
-
-ResourceAllocator& get_resource_allocator()
-{
-    init_gpu_geometry_algorithms();
-    return resource_allocator_;
-}
-
-void init_gpu_geometry_algorithms()
-{
-    if (!shader_factory) {
-        resource_allocator_.set_device(RHI::get_device());
-        shader_factory = std::make_shared<ShaderFactory>();
-        shader_factory->add_search_path(
-            SlangShaderCompiler::get_shader_dir(ShaderDirType::Renderer)
-                .string() +
-            "/shaders");
-        shader_factory->add_search_path(
-            SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomNodes)
-                .string());
-        shader_factory->add_search_path(
-            SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomCompute)
-                .string());
-        resource_allocator_.shader_factory = shader_factory.get();
-    }
-}
-
-void deinit_gpu_geometry_algorithms()
-{
-    resource_allocator_.terminate();
-    shader_factory.reset();
-}
 
 nvrhi::rt::AccelStructHandle get_geomtry_tlas(
     const Geometry& geometry,
