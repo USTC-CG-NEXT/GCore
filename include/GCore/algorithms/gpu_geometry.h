@@ -18,6 +18,9 @@ GEOMETRY_API void init_gpu_geometry_algorithms();
 // then release the RHI reference so the device can be destroyed.
 GEOMETRY_API void deinit_gpu_geometry_algorithms();
 
+// Returns true between init and deinit — safe to use the allocator.
+GEOMETRY_API bool is_gpu_alive();
+
 GEOMETRY_API ResourceAllocator& get_resource_allocator();
 
 #endif

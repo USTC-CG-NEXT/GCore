@@ -833,6 +833,22 @@ bool write_geometry_to_usd(
                 vec3f_array_to_vt_array(curve->get_curve_normals()), time);
             usd_curve.CreateDisplayColorAttr().Set(
                 vec3f_array_to_vt_array(curve->get_display_color()), time);
+
+            // Write custom vertex scalar quantities as primvars
+            auto primVarAPI = pxr::UsdGeomPrimvarsAPI(usd_curve);
+            for (const std::string& name :
+                 curve->get_vertex_scalar_quantity_names()) {
+                auto values = curve->get_vertex_scalar_quantity(name);
+                if (!values.empty()) {
+                    const std::string primvar_name = "vertex:scalar:" + name;
+                    auto primvar = primVarAPI.CreatePrimvar(
+                        pxr::TfToken(primvar_name.c_str()),
+                        pxr::SdfValueTypeNames->FloatArray);
+                    primvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
+                    primvar.Set(
+                        float_array_to_vt_array(values), time);
+                }
+            }
         }
     }
     else if (volume) {
@@ -997,12 +1013,16 @@ bool write_geometry_as_over_spec(
     geom_copy.apply_transform();
 
     auto mesh = geom_copy.get_component<MeshComponent>();
-    if (!mesh) {
-        spdlog::error("[write_geometry_as_over_spec] No mesh component found");
+    auto curve = geom_copy.get_component<CurveComponent>();
+    auto points = geom_copy.get_component<PointsComponent>();
+
+    if (!mesh && !curve && !points) {
+        spdlog::error(
+            "[write_geometry_as_over_spec] No supported geometry component found");
         return false;
     }
 
-    auto mesh_usdview = get_usd_view(*mesh);
+    // --- Create prim spec and helper (shared by all geometry types) ---
 
     spdlog::debug(
         "[MODIFIER] write_geometry_as_over_spec: Creating over spec at "
@@ -1029,34 +1049,21 @@ bool write_geometry_as_over_spec(
         return false;
     }
 
-    spdlog::debug(
-        "[MODIFIER] Prim spec created, vertices count: {}, faces count: "
-        "{}",
-        mesh_usdview.get_vertices().size(),
-        mesh_usdview.get_face_vertex_counts().size());
-
     // Set specifier to "over" (not "def") - this is the key for
     // non-destructive editing
     prim_spec->SetSpecifier(SdfSpecifierOver);
 
-    // Set the type name
-    prim_spec->SetTypeName(TfToken("Mesh"));
-
     // Helper to set or update an attribute value
-    // Important: We must check if attribute already exists before creating
     auto set_attribute_value = [&prim_spec, &modifier_layer, &time, &sdf_path](
                                    const TfToken& attr_name,
                                    const SdfValueTypeName& type_name,
                                    const VtValue& value) -> bool {
-        // Build correct attribute path: /prim_path.attr_name
         SdfPath attr_path = sdf_path.AppendProperty(attr_name);
 
-        // Check if attribute spec already exists in the layer
         SdfAttributeSpecHandle attr_spec =
             modifier_layer->GetAttributeAtPath(attr_path);
 
         if (!attr_spec) {
-            // Create new attribute spec only if it doesn't exist
             attr_spec = SdfAttributeSpec::New(
                 prim_spec, attr_name, type_name, SdfVariabilityVarying);
             if (!attr_spec) {
@@ -1067,10 +1074,8 @@ bool write_geometry_as_over_spec(
             }
         }
 
-        // Set the value (this updates existing spec)
         attr_spec->SetDefaultValue(value);
 
-        // Also set time sample if not default time
         if (time != UsdTimeCode::Default()) {
             modifier_layer->SetTimeSample(
                 attr_spec->GetPath(), time.GetValue(), value);
@@ -1079,128 +1084,237 @@ bool write_geometry_as_over_spec(
         return true;
     };
 
-    // Write points
-    if (!mesh_usdview.get_vertices().empty()) {
-        set_attribute_value(
-            TfToken("points"),
-            SdfValueTypeNames->Point3fArray,
-            VtValue(mesh_usdview.get_vertices()));
-    }
+    // --- Write geometry type-specific data ---
 
-    // Write face topology
-    if (!mesh_usdview.get_face_vertex_counts().empty()) {
-        set_attribute_value(
-            TfToken("faceVertexCounts"),
-            SdfValueTypeNames->IntArray,
-            VtValue(mesh_usdview.get_face_vertex_counts()));
-    }
+    if (mesh) {
+        auto mesh_usdview = get_usd_view(*mesh);
 
-    if (!mesh_usdview.get_face_vertex_indices().empty()) {
-        set_attribute_value(
-            TfToken("faceVertexIndices"),
-            SdfValueTypeNames->IntArray,
-            VtValue(mesh_usdview.get_face_vertex_indices()));
-    }
+        prim_spec->SetTypeName(TfToken("Mesh"));
 
-    // Write normals
-    if (!mesh_usdview.get_normals().empty()) {
-        set_attribute_value(
-            TfToken("normals"),
-            SdfValueTypeNames->Vector3fArray,
-            VtValue(mesh_usdview.get_normals()));
-    }
-
-    // Write display colors as primvar
-    if (!mesh_usdview.get_display_colors().empty()) {
-        const TfToken attr_name("primvars:displayColor");
-        SdfPath attr_path = sdf_path.AppendProperty(attr_name);
-
-        SdfAttributeSpecHandle color_spec =
-            modifier_layer->GetAttributeAtPath(attr_path);
-        if (!color_spec) {
-            color_spec = SdfAttributeSpec::New(
-                prim_spec,
-                attr_name,
-                SdfValueTypeNames->Color3fArray,
-                SdfVariabilityVarying);
+        if (!mesh_usdview.get_vertices().empty()) {
+            set_attribute_value(
+                TfToken("points"),
+                SdfValueTypeNames->Point3fArray,
+                VtValue(mesh_usdview.get_vertices()));
         }
-        if (color_spec) {
-            size_t num_colors = mesh_usdview.get_display_colors().size();
-            size_t num_vertices = mesh_usdview.get_vertices().size();
-            size_t num_faces = mesh_usdview.get_face_vertex_counts().size();
 
-            TfToken interp = UsdGeomTokens->vertex;
-            if (num_colors == num_faces)
-                interp = UsdGeomTokens->uniform;
+        if (!mesh_usdview.get_face_vertex_counts().empty()) {
+            set_attribute_value(
+                TfToken("faceVertexCounts"),
+                SdfValueTypeNames->IntArray,
+                VtValue(mesh_usdview.get_face_vertex_counts()));
+        }
 
-            color_spec->SetInfo(TfToken("interpolation"), VtValue(interp));
-            color_spec->SetDefaultValue(
-                VtValue(mesh_usdview.get_display_colors()));
-            if (time != UsdTimeCode::Default()) {
-                modifier_layer->SetTimeSample(
-                    attr_path,
-                    time.GetValue(),
+        if (!mesh_usdview.get_face_vertex_indices().empty()) {
+            set_attribute_value(
+                TfToken("faceVertexIndices"),
+                SdfValueTypeNames->IntArray,
+                VtValue(mesh_usdview.get_face_vertex_indices()));
+        }
+
+        if (!mesh_usdview.get_normals().empty()) {
+            set_attribute_value(
+                TfToken("normals"),
+                SdfValueTypeNames->Vector3fArray,
+                VtValue(mesh_usdview.get_normals()));
+        }
+
+        // Write display colors as primvar
+        if (!mesh_usdview.get_display_colors().empty()) {
+            const TfToken attr_name("primvars:displayColor");
+            SdfPath attr_path = sdf_path.AppendProperty(attr_name);
+
+            SdfAttributeSpecHandle color_spec =
+                modifier_layer->GetAttributeAtPath(attr_path);
+            if (!color_spec) {
+                color_spec = SdfAttributeSpec::New(
+                    prim_spec,
+                    attr_name,
+                    SdfValueTypeNames->Color3fArray,
+                    SdfVariabilityVarying);
+            }
+            if (color_spec) {
+                size_t num_colors = mesh_usdview.get_display_colors().size();
+                size_t num_vertices = mesh_usdview.get_vertices().size();
+                size_t num_faces = mesh_usdview.get_face_vertex_counts().size();
+
+                TfToken interp = UsdGeomTokens->vertex;
+                if (num_colors == num_faces)
+                    interp = UsdGeomTokens->uniform;
+
+                color_spec->SetInfo(TfToken("interpolation"), VtValue(interp));
+                color_spec->SetDefaultValue(
                     VtValue(mesh_usdview.get_display_colors()));
+                if (time != UsdTimeCode::Default()) {
+                    modifier_layer->SetTimeSample(
+                        attr_path,
+                        time.GetValue(),
+                        VtValue(mesh_usdview.get_display_colors()));
+                }
             }
         }
-    }
 
-    // Write UV coordinates as primvar
-    if (!mesh_usdview.get_uv_coordinates().empty()) {
-        const TfToken attr_name("primvars:UVMap");
-        SdfPath attr_path = sdf_path.AppendProperty(attr_name);
+        // Write UV coordinates as primvar
+        if (!mesh_usdview.get_uv_coordinates().empty()) {
+            const TfToken attr_name("primvars:UVMap");
+            SdfPath attr_path = sdf_path.AppendProperty(attr_name);
 
-        SdfAttributeSpecHandle uv_spec =
-            modifier_layer->GetAttributeAtPath(attr_path);
-        if (!uv_spec) {
-            uv_spec = SdfAttributeSpec::New(
-                prim_spec,
-                attr_name,
-                SdfValueTypeNames->TexCoord2fArray,
-                SdfVariabilityVarying);
-        }
-        if (uv_spec) {
-            size_t num_uvs = mesh_usdview.get_uv_coordinates().size();
-            size_t num_vertices = mesh_usdview.get_vertices().size();
+            SdfAttributeSpecHandle uv_spec =
+                modifier_layer->GetAttributeAtPath(attr_path);
+            if (!uv_spec) {
+                uv_spec = SdfAttributeSpec::New(
+                    prim_spec,
+                    attr_name,
+                    SdfValueTypeNames->TexCoord2fArray,
+                    SdfVariabilityVarying);
+            }
+            if (uv_spec) {
+                size_t num_uvs = mesh_usdview.get_uv_coordinates().size();
+                size_t num_vertices = mesh_usdview.get_vertices().size();
 
-            TfToken interp = (num_uvs == num_vertices)
-                                 ? UsdGeomTokens->vertex
-                                 : UsdGeomTokens->faceVarying;
+                TfToken interp = (num_uvs == num_vertices)
+                                     ? UsdGeomTokens->vertex
+                                     : UsdGeomTokens->faceVarying;
 
-            uv_spec->SetInfo(TfToken("interpolation"), VtValue(interp));
-            uv_spec->SetDefaultValue(
-                VtValue(mesh_usdview.get_uv_coordinates()));
-            if (time != UsdTimeCode::Default()) {
-                modifier_layer->SetTimeSample(
-                    attr_path,
-                    time.GetValue(),
+                uv_spec->SetInfo(TfToken("interpolation"), VtValue(interp));
+                uv_spec->SetDefaultValue(
                     VtValue(mesh_usdview.get_uv_coordinates()));
+                if (time != UsdTimeCode::Default()) {
+                    modifier_layer->SetTimeSample(
+                        attr_path,
+                        time.GetValue(),
+                        VtValue(mesh_usdview.get_uv_coordinates()));
+                }
             }
         }
-    }
 
-    spdlog::debug(
-        "[MODIFIER] Successfully wrote over spec to '{}', points: {}, "
-        "faces: {}",
-        sdf_path.GetString(),
-        mesh_usdview.get_vertices().size(),
-        mesh_usdview.get_face_vertex_counts().size());
-
-    // Debug: print first few points
-    const auto& verts = mesh_usdview.get_vertices();
-    if (!verts.empty()) {
         spdlog::debug(
-            "[MODIFIER] First 3 points: ({}, {}, {}), ({}, {}, {}), ({}, "
-            "{}, {})",
-            verts[0][0],
-            verts[0][1],
-            verts[0][2],
-            verts.size() > 1 ? verts[1][0] : 0,
-            verts.size() > 1 ? verts[1][1] : 0,
-            verts.size() > 1 ? verts[1][2] : 0,
-            verts.size() > 2 ? verts[2][0] : 0,
-            verts.size() > 2 ? verts[2][1] : 0,
-            verts.size() > 2 ? verts[2][2] : 0);
+            "[MODIFIER] Successfully wrote mesh over spec to '{}', points: {}, "
+            "faces: {}",
+            sdf_path.GetString(),
+            mesh_usdview.get_vertices().size(),
+            mesh_usdview.get_face_vertex_counts().size());
+    }
+    else if (curve) {
+        prim_spec->SetTypeName(TfToken("BasisCurves"));
+
+        auto verts = vec3f_array_to_vt_array(curve->get_vertices());
+        if (!verts.empty()) {
+            set_attribute_value(
+                TfToken("points"),
+                SdfValueTypeNames->Point3fArray,
+                VtValue(verts));
+        }
+
+        auto widths = float_array_to_vt_array(curve->get_width());
+        if (!widths.empty()) {
+            set_attribute_value(
+                TfToken("widths"),
+                SdfValueTypeNames->FloatArray,
+                VtValue(widths));
+        }
+
+        auto counts = int_array_to_vt_array(curve->get_vert_count());
+        if (!counts.empty()) {
+            set_attribute_value(
+                TfToken("curveVertexCounts"),
+                SdfValueTypeNames->IntArray,
+                VtValue(counts));
+        }
+
+        // Curve type
+        TfToken curve_type_token =
+            curve->get_type() == CurveComponent::CurveType::Linear
+                ? pxr::UsdGeomTokens->linear
+                : pxr::UsdGeomTokens->cubic;
+        set_attribute_value(
+            TfToken("type"), SdfValueTypeNames->Token, VtValue(curve_type_token));
+
+        // Wrap
+        TfToken wrap =
+            curve->get_periodic() ? pxr::UsdGeomTokens->periodic
+                                  : pxr::UsdGeomTokens->nonperiodic;
+        set_attribute_value(
+            TfToken("wrap"), SdfValueTypeNames->Token, VtValue(wrap));
+
+        // Display color
+        auto colors = vec3f_array_to_vt_array(curve->get_display_color());
+        if (!colors.empty()) {
+            const TfToken attr_name("primvars:displayColor");
+            SdfPath attr_path = sdf_path.AppendProperty(attr_name);
+            SdfAttributeSpecHandle color_spec =
+                modifier_layer->GetAttributeAtPath(attr_path);
+            if (!color_spec) {
+                color_spec = SdfAttributeSpec::New(
+                    prim_spec,
+                    attr_name,
+                    SdfValueTypeNames->Color3fArray,
+                    SdfVariabilityVarying);
+            }
+            if (color_spec) {
+                color_spec->SetInfo(
+                    TfToken("interpolation"), VtValue(UsdGeomTokens->vertex));
+                color_spec->SetDefaultValue(VtValue(colors));
+                if (time != UsdTimeCode::Default()) {
+                    modifier_layer->SetTimeSample(
+                        attr_path, time.GetValue(), VtValue(colors));
+                }
+            }
+        }
+
+        spdlog::debug(
+            "[MODIFIER] Successfully wrote curve over spec to '{}', vertices: "
+            "{}",
+            sdf_path.GetString(),
+            verts.size());
+    }
+    else if (points) {
+        prim_spec->SetTypeName(TfToken("Points"));
+
+        auto verts = vec3f_array_to_vt_array(points->get_vertices());
+        if (!verts.empty()) {
+            set_attribute_value(
+                TfToken("points"),
+                SdfValueTypeNames->Point3fArray,
+                VtValue(verts));
+        }
+
+        auto widths = float_array_to_vt_array(points->get_width());
+        if (!widths.empty()) {
+            set_attribute_value(
+                TfToken("widths"),
+                SdfValueTypeNames->FloatArray,
+                VtValue(widths));
+        }
+
+        auto colors = vec3f_array_to_vt_array(points->get_display_color());
+        if (!colors.empty()) {
+            const TfToken attr_name("primvars:displayColor");
+            SdfPath attr_path = sdf_path.AppendProperty(attr_name);
+            SdfAttributeSpecHandle color_spec =
+                modifier_layer->GetAttributeAtPath(attr_path);
+            if (!color_spec) {
+                color_spec = SdfAttributeSpec::New(
+                    prim_spec,
+                    attr_name,
+                    SdfValueTypeNames->Color3fArray,
+                    SdfVariabilityVarying);
+            }
+            if (color_spec) {
+                color_spec->SetInfo(
+                    TfToken("interpolation"), VtValue(UsdGeomTokens->vertex));
+                color_spec->SetDefaultValue(VtValue(colors));
+                if (time != UsdTimeCode::Default()) {
+                    modifier_layer->SetTimeSample(
+                        attr_path, time.GetValue(), VtValue(colors));
+                }
+            }
+        }
+
+        spdlog::debug(
+            "[MODIFIER] Successfully wrote points over spec to '{}', count: {}",
+            sdf_path.GetString(),
+            verts.size());
     }
 
     return true;

@@ -3,7 +3,6 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
-#include <vector>
 #ifdef GEOM_USD_EXTENSION
 #include <pxr/usd/sdf/layer.h>
 #include <pxr/usd/sdf/path.h>
@@ -58,6 +57,12 @@ struct GeomPayload {
     float delta_time = 0.0f;
     bool has_simulation = false;
     bool is_simulating = false;
+
+    // Brush state from viewport interaction (updated every frame)
+    glm::vec3 brush_point = glm::vec3(0.0f);  // current world position
+    float brush_time = 0.0f;                  // seconds from stroke start
+    bool brush_active = false;                // pen is currently down
+    bool brush_new_point = false;             // new point arrived this frame
 
     std::string stage_filepath_;
 };

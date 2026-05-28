@@ -3,6 +3,7 @@
 #ifdef GPU_GEOM_ALGORITHM
 
 #include <RHI/rhi.hpp>
+#include <cstdlib>
 #include <spdlog/spdlog.h>
 
 #include <memory>
@@ -14,12 +15,18 @@ RUZINO_NAMESPACE_OPEN_SCOPE
 
 static ResourceAllocator resource_allocator_;
 static std::shared_ptr<ShaderFactory> shader_factory;
+static bool gpu_alive_ = false;
+static bool atexit_registered_ = false;
 
 ResourceAllocator& get_resource_allocator()
 {
+    if (gpu_alive_)
+        return resource_allocator_;
     init_gpu_geometry_algorithms();
     return resource_allocator_;
 }
+
+bool is_gpu_alive() { return gpu_alive_; }
 
 void init_gpu_geometry_algorithms()
 {
@@ -43,12 +50,24 @@ void init_gpu_geometry_algorithms()
         SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomCompute)
             .string());
     resource_allocator_.shader_factory = shader_factory.get();
+    gpu_alive_ = true;
+
+    // Register cleanup via atexit so it runs before static destructors.
+    // This ensures all GPU resources are returned to the allocator cache,
+    // then the allocator cache is cleared, then RHI::shutdown() releases
+    // the device — all while the relevant DLLs are still loaded.
+    if (!atexit_registered_) {
+        atexit_registered_ = true;
+        std::atexit(deinit_gpu_geometry_algorithms);
+    }
 }
 
 void deinit_gpu_geometry_algorithms()
 {
-    if (!shader_factory)
+    if (!gpu_alive_)
         return;
+
+    gpu_alive_ = false;
 
     // Release all cached GPU resources while the device is still alive
     // (kept alive by our RHI reference).

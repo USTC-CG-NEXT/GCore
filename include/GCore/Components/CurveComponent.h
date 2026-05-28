@@ -1,6 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <map>
 #include <string>
+#include <vector>
 
 #include "GCore/Components.h"
 #include "GCore/GOP.h"
@@ -131,6 +133,8 @@ struct GEOMETRY_API CurveComponent : public GeometryComponent {
 
     GeometryComponentHandle copy(Geometry* operand) const override;
 
+    friend struct CurveComponent;
+
     enum class CurveType {
         Linear,
         Cubic,
@@ -146,6 +150,34 @@ struct GEOMETRY_API CurveComponent : public GeometryComponent {
         curve_type = type;
     }
 
+    [[nodiscard]] const std::vector<float>& get_vertex_scalar_quantity(
+        const std::string& name) const
+    {
+        static const std::vector<float> empty;
+        auto it = vertex_scalar_quantities.find(name);
+        if (it != vertex_scalar_quantities.end()) {
+            return it->second;
+        }
+        return empty;
+    }
+
+    [[nodiscard]] std::vector<std::string> get_vertex_scalar_quantity_names()
+        const
+    {
+        std::vector<std::string> names;
+        for (const auto& pair : vertex_scalar_quantities) {
+            names.push_back(pair.first);
+        }
+        return names;
+    }
+
+    void add_vertex_scalar_quantity(
+        const std::string& name,
+        const std::vector<float>& scalar)
+    {
+        vertex_scalar_quantities[name] = scalar;
+    }
+
    private:
     std::vector<glm::vec3> vertices;
     std::vector<float> width;
@@ -154,6 +186,7 @@ struct GEOMETRY_API CurveComponent : public GeometryComponent {
 
     bool periodic = false;
     std::vector<glm::vec3> curve_normals;
+    std::map<std::string, std::vector<float>> vertex_scalar_quantities;
 };
 
 RUZINO_NAMESPACE_CLOSE_SCOPE

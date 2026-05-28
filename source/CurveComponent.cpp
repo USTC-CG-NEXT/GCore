@@ -26,6 +26,10 @@ GeometryComponentHandle CurveComponent::copy(Geometry* operand) const
     ret->set_vert_count(this->get_vert_count());
     ret->set_periodic(this->get_periodic());
     ret->set_curve_normals(this->get_curve_normals());
+    // Copy vertex scalar quantities
+    for (const auto& [name, data] : vertex_scalar_quantities) {
+        ret->add_vertex_scalar_quantity(name, data);
+    }
 #endif
     return ret;
 }
