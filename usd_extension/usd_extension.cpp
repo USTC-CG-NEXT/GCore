@@ -831,11 +831,25 @@ bool write_geometry_to_usd(
                 int_array_to_vt_array(curve->get_vert_count()), time);
             usd_curve.CreateNormalsAttr().Set(
                 vec3f_array_to_vt_array(curve->get_curve_normals()), time);
-            usd_curve.CreateDisplayColorAttr().Set(
-                vec3f_array_to_vt_array(curve->get_display_color()), time);
+
+            // displayColor: UsdGeomGprim::CreateDisplayColorAttr defaults to a
+            // constant (single GfVec3f) primvar. brush_capture emits a
+            // per-vertex color array, so we must use PrimvarsAPI with the
+            // correct interpolation to avoid a "Value input not compatible
+            // with default" HdSt warning (scalar default vs array input).
+            auto primVarAPI = pxr::UsdGeomPrimvarsAPI(usd_curve);
+            auto curve_colors = curve->get_display_color();
+            if (!curve_colors.empty()) {
+                auto colorPrimvar = primVarAPI.CreatePrimvar(
+                    pxr::TfToken("displayColor"),
+                    pxr::SdfValueTypeNames->Color3fArray);
+                // One color per vertex -> vertex interpolation
+                colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
+                colorPrimvar.Set(
+                    vec3f_array_to_vt_array(curve_colors), time);
+            }
 
             // Write custom vertex scalar quantities as primvars
-            auto primVarAPI = pxr::UsdGeomPrimvarsAPI(usd_curve);
             for (const std::string& name :
                  curve->get_vertex_scalar_quantity_names()) {
                 auto values = curve->get_vertex_scalar_quantity(name);

@@ -38,6 +38,16 @@ struct PickEvent {
     }
 };
 
+// Snapshot of the viewport brush tool state, broadcast on the
+// window->events() bus under ViewportEvents::BRUSH_STATE. This is the
+// canonical payload type for that event (see GUI/viewport_events.h).
+struct ViewportBrushState {
+    glm::vec3 point{0.0f};   // current world position of the brush
+    float time = 0.0f;       // seconds since stroke start
+    bool active = false;     // pen is currently down
+    bool new_point = false;  // a new sample arrived since the last emit
+};
+
 struct GeomPayload {
 #ifdef GEOM_USD_EXTENSION
     pxr::UsdStageRefPtr stage;
