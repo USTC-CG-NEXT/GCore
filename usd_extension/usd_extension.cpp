@@ -845,8 +845,7 @@ bool write_geometry_to_usd(
                     pxr::SdfValueTypeNames->Color3fArray);
                 // One color per vertex -> vertex interpolation
                 colorPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
-                colorPrimvar.Set(
-                    vec3f_array_to_vt_array(curve_colors), time);
+                colorPrimvar.Set(vec3f_array_to_vt_array(curve_colors), time);
             }
 
             // Write custom vertex scalar quantities as primvars
@@ -859,8 +858,7 @@ bool write_geometry_to_usd(
                         pxr::TfToken(primvar_name.c_str()),
                         pxr::SdfValueTypeNames->FloatArray);
                     primvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
-                    primvar.Set(
-                        float_array_to_vt_array(values), time);
+                    primvar.Set(float_array_to_vt_array(values), time);
                 }
             }
         }
@@ -1032,7 +1030,8 @@ bool write_geometry_as_over_spec(
 
     if (!mesh && !curve && !points) {
         spdlog::error(
-            "[write_geometry_as_over_spec] No supported geometry component found");
+            "[write_geometry_as_over_spec] No supported geometry component "
+            "found");
         return false;
     }
 
@@ -1126,11 +1125,70 @@ bool write_geometry_as_over_spec(
                 VtValue(mesh_usdview.get_face_vertex_indices()));
         }
 
-        if (!mesh_usdview.get_normals().empty()) {
+        // Author FLAT per-face normals (faceVarying interpolation) computed
+        // directly from the points + topology, rather than trusting whatever
+        // the geometry source stored in MeshComponent::normals (which may be
+        // per-vertex and blends to a grazing direction at sharp edges).
+        //
+        // Why: the hd_RUZINO path tracer computes SMOOTH shading by default
+        // when a mesh has no (or vertex-interpolated) normals, averaging
+        // adjacent face normals at shared vertices. For a hard-edged mesh that
+        // yields near-tangential normals along the edges, which drive the
+        // MaterialX BSDF to NaN/Inf on secondary bounces -- flagged by the
+        // renderer's red debug color. Giving every face-vertex that face's own
+        // geometric normal (normalW == faceNormalW everywhere) is the
+        // physically correct shading for a hard-edged surface and removes the
+        // NaNs. This is the single source of truth: any downstream consumer
+        // of this USD (render_gridbox.py, usdview, ...) gets correct normals.
+        const auto& verts = mesh_usdview.get_vertices();
+        const auto& fvc = mesh_usdview.get_face_vertex_counts();
+        const auto& fvi = mesh_usdview.get_face_vertex_indices();
+        VtArray<GfVec3f> flat_normals;
+        flat_normals.reserve(fvi.size());
+        size_t idx = 0;
+        bool degenerate = false;
+        for (int count : fvc) {
+            if (count < 3 || idx + count > fvi.size()) {
+                degenerate = true;
+                break;
+            }
+            const GfVec3f& p0 = verts[fvi[idx]];
+            const GfVec3f& p1 = verts[fvi[idx + 1]];
+            const GfVec3f& p2 = verts[fvi[idx + 2]];
+            GfVec3f n = GfCross(p1 - p0, p2 - p0);
+            float len2 = GfDot(n, n);
+            if (len2 < 1e-12f) {
+                // Degenerate face -- fall back to +Y so we still emit a valid
+                // unit normal and don't propagate NaNs.
+                n = GfVec3f(0, 1, 0);
+            }
+            else {
+                n /= std::sqrt(len2);
+            }
+            for (int v = 0; v < count; ++v)
+                flat_normals.push_back(n);
+            idx += count;
+        }
+
+        if (!degenerate && !flat_normals.empty()) {
+            // Write the normals array...
             set_attribute_value(
                 TfToken("normals"),
                 SdfValueTypeNames->Vector3fArray,
-                VtValue(mesh_usdview.get_normals()));
+                VtValue(flat_normals));
+            // ...and set its interpolation to faceVarying. set_attribute_value
+            // creates the attribute spec but does not set interpolation, so do
+            // it explicitly here -- without it USD defaults to 'vertex' and the
+            // normals get blended across faces (the very smooth-shading problem
+            // we are avoiding).
+            SdfAttributeSpecHandle nrm_spec =
+                modifier_layer->GetAttributeAtPath(
+                    sdf_path.AppendProperty(TfToken("normals")));
+            if (nrm_spec) {
+                nrm_spec->SetInfo(
+                    TfToken("interpolation"),
+                    VtValue(UsdGeomTokens->faceVarying));
+            }
         }
 
         // Write display colors as primvar
@@ -1242,12 +1300,13 @@ bool write_geometry_as_over_spec(
                 ? pxr::UsdGeomTokens->linear
                 : pxr::UsdGeomTokens->cubic;
         set_attribute_value(
-            TfToken("type"), SdfValueTypeNames->Token, VtValue(curve_type_token));
+            TfToken("type"),
+            SdfValueTypeNames->Token,
+            VtValue(curve_type_token));
 
         // Wrap
-        TfToken wrap =
-            curve->get_periodic() ? pxr::UsdGeomTokens->periodic
-                                  : pxr::UsdGeomTokens->nonperiodic;
+        TfToken wrap = curve->get_periodic() ? pxr::UsdGeomTokens->periodic
+                                             : pxr::UsdGeomTokens->nonperiodic;
         set_attribute_value(
             TfToken("wrap"), SdfValueTypeNames->Token, VtValue(wrap));
 
