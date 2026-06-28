@@ -87,21 +87,13 @@ inline nvrhi::IBindingLayout* GetBindlessBufferLayout(
 // Graphics context initialization
 inline void CreateGLContext()
 {
-#ifdef _WIN32
-    HDC hdc = GetDC(GetConsoleWindow());
-    PIXELFORMATDESCRIPTOR pfd = {};
-    pfd.nSize = sizeof(pfd);
-    pfd.nVersion = 1;
-    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-    pfd.iPixelType = PFD_TYPE_RGBA;
-    pfd.cColorBits = 24;
-
-    int pixelFormat = ChoosePixelFormat(hdc, &pfd);
-    SetPixelFormat(hdc, pixelFormat, &pfd);
-
-    HGLRC hglrc = wglCreateContext(hdc);
-    wglMakeCurrent(hdc, hglrc);
-#endif
+    // Delegate to the canonical RHI helper so this test binary gets the same
+    // hardware-accelerated 4.5 context as every other Hydra entry point, rather
+    // than the old GetConsoleWindow()+wglCreateContext path which has no 4.5
+    // upgrade and can fall back to software GL 1.1 (rejected by HgiGL).
+    if (!Ruzino::RHI::ensure_gl_driver_loaded()) {
+        spdlog::error("CreateGLContext: failed to create OpenGL 4.5 context");
+    }
 }
 }  // namespace RenderUtil
 
