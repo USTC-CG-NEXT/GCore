@@ -12,6 +12,7 @@ import os
 binary_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'Binaries', 'Release')
 binary_dir = os.path.abspath(binary_dir)
 
+from conftest import OUTPUT_DIR
 from ruzino_graph import RuzinoGraph
 import stage_py
 import geometry_py as geom
@@ -24,7 +25,7 @@ def test_write_grid_to_usd():
     print("TEST: Write Grid to USD")
     print("="*70)
 
-    output_file = "test_grid.usdc"
+    output_file = os.path.join(OUTPUT_DIR, "test_grid.usdc")
 
     g = RuzinoGraph("GridUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
@@ -57,7 +58,7 @@ def test_write_grid_to_usd():
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
 
     # Check modifier layer file (where actual geometry data is stored)
-    modifier_file = "test_grid_modifiers.usdc"
+    modifier_file = os.path.join(OUTPUT_DIR, "test_grid_modifiers.usdc")
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
 
@@ -79,7 +80,7 @@ def test_write_uv_sphere_to_usd():
     print("TEST: Write UV Sphere to USD")
     print("="*70)
 
-    output_file = "test_sphere.usdc"
+    output_file = os.path.join(OUTPUT_DIR, "test_sphere.usdc")
 
     g = RuzinoGraph("SphereUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
@@ -113,7 +114,7 @@ def test_write_uv_sphere_to_usd():
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
 
     # Check modifier layer file
-    modifier_file = "test_sphere_modifiers.usdc"
+    modifier_file = os.path.join(OUTPUT_DIR, "test_sphere_modifiers.usdc")
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
 
@@ -133,7 +134,7 @@ def test_write_ico_sphere_to_usd():
     print("TEST: Write Ico Sphere to USD")
     print("="*70)
 
-    output_file = "test_ico.usdc"
+    output_file = os.path.join(OUTPUT_DIR, "test_ico.usdc")
 
     g = RuzinoGraph("IcoUSDTest")
     g.loadConfiguration(os.path.join(binary_dir, "geometry_nodes.json"))
@@ -166,7 +167,7 @@ def test_write_ico_sphere_to_usd():
     assert os.path.exists(output_file), f"USD file not created: {output_file}"
 
     # Check modifier layer file
-    modifier_file = "test_ico_modifiers.usdc"
+    modifier_file = os.path.join(OUTPUT_DIR, "test_ico_modifiers.usdc")
     file_size = os.path.getsize(output_file)
     print(f"✓ USD file created: {output_file} ({file_size} bytes)")
 
@@ -193,8 +194,9 @@ if __name__ == "__main__":
         # List created files
         print("\n📁 Created USD files:")
         for f in ["test_grid.usdc", "test_sphere.usdc", "test_ico.usdc"]:
-            if os.path.exists(f):
-                size = os.path.getsize(f)
+            fp = os.path.join(OUTPUT_DIR, f)
+            if os.path.exists(fp):
+                size = os.path.getsize(fp)
                 print(f"  • {f} ({size} bytes)")
 
     except Exception as e:

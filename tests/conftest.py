@@ -12,6 +12,12 @@ binary_dir = os.path.join(
 )
 binary_dir = os.path.abspath(binary_dir)
 
+# All test outputs (.usdc) must live under Binaries/Release/test_output/geometry/.
+# Binaries/ is gitignored at the repo root, so nothing here enters the source
+# tree. Tests import this via `from conftest import OUTPUT_DIR`.
+OUTPUT_DIR = os.path.join(binary_dir, "test_output", "geometry")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 project_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
 )
