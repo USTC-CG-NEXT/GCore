@@ -41,8 +41,7 @@ void init_gpu_geometry_algorithms()
     shader_factory = std::make_shared<ShaderFactory>();
     shader_factory->add_search_path(
         SlangShaderCompiler::get_shader_dir(ShaderDirType::Renderer)
-            .string() +
-        "/shaders");
+            .string());
     shader_factory->add_search_path(
         SlangShaderCompiler::get_shader_dir(ShaderDirType::GeomNodes)
             .string());
