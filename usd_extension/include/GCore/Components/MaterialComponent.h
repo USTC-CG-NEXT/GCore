@@ -6,6 +6,7 @@
 
 #include "GCore/Components.h"
 #include "GCore/GOP.h"
+#include "GCore/MaterialObject.h"
 
 RUZINO_NAMESPACE_OPEN_SCOPE
 struct GEOMETRY_API MaterialComponent : public GeometryComponent {
@@ -21,19 +22,32 @@ struct GEOMETRY_API MaterialComponent : public GeometryComponent {
     size_t hash() const override
     {
         size_t h = 0;
-        for (const auto& texture : textures) {
+        for (const auto& texture : material_object.textures) {
             h ^= std::hash<std::string>{}(texture) + 0x9e3779b9 + (h << 6) +
                  (h >> 2);
         }
+        h ^= std::hash<bool>{}(material_object.textured) + 0x9e3779b9 +
+             (h << 6) + (h >> 2);
+        auto color_hash = std::hash<float>{};
+        h ^= (color_hash(material_object.base_color.r) ^
+              (color_hash(material_object.base_color.g) << 1) ^
+              (color_hash(material_object.base_color.b) << 2)) +
+             0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<bool>{}(material_object.alpha_cutout) + 0x9e3779b9 +
+             (h << 6) + (h >> 2);
+        h ^= std::hash<float>{}(material_object.opacity_threshold) +
+             0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<float>{}(material_object.roughness) + 0x9e3779b9 +
+             (h << 6) + (h >> 2);
+        h ^= std::hash<std::string>{}(material_object.wrap_mode) + 0x9e3779b9 +
+             (h << 6) + (h >> 2);
         return h;
     }
 
     GeometryComponentHandle copy(Geometry* operand) const override
     {
         auto ret = std::make_shared<MaterialComponent>(operand);
-
-        // This is fast because the VtArray has the copy on write mechanism
-        ret->textures = this->textures;
+        ret->material_object = this->material_object;
         return ret;
     }
 
@@ -53,7 +67,10 @@ struct GEOMETRY_API MaterialComponent : public GeometryComponent {
 
     pxr::SdfPath get_material_path() const;
 
-    std::vector<std::string> textures;
+    // The authored material data. The write path (usd_extension) materializes
+    // deferred in-graph textures into image files (filling
+    // material_object.textures) and authors the USD material network.
+    MaterialObject material_object;
 
     pxr::SdfPath mtlx_material_path;
 };

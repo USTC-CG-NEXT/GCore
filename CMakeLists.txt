@@ -13,7 +13,7 @@ endif()
 RUZINO_ADD_LIB(
 	geometry
 	SHARED
-	PUBLIC_LIBS OpenMeshCore spdlog::spdlog igl_core triangle::triangle glm::glm OpenVolumeMesh tetgen_geom openvdb
+	PUBLIC_LIBS OpenMeshCore spdlog::spdlog igl_core triangle::triangle glm::glm OpenVolumeMesh tetgen_geom openvdb stb_image
 	PYTHON_WRAP_DIR python
 	COMPILE_DEFS
 		NOMINMAX

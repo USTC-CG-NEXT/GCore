@@ -1,5 +1,6 @@
 #include <GCore/usd_extension.h>
 #include <pxr/base/gf/matrix4d.h>
+#include <pxr/usd/usd/editTarget.h>
 #include <pxr/usd/usdGeom/capsule.h>
 #include <pxr/usd/usdGeom/cone.h>
 #include <pxr/usd/usdGeom/cube.h>
@@ -18,6 +19,9 @@
 #include <pxr/usd/usdVol/openVDBAsset.h>
 #include <pxr/usd/usdVol/volume.h>
 #include <spdlog/spdlog.h>
+#include <stb_image_write.h>
+
+#include <filesystem>
 
 #include "GCore/Components/CurveComponent.h"
 #include "GCore/Components/InstancerComponent.h"
@@ -578,6 +582,104 @@ bool legal(const std::string& string)
     return false;
 }
 
+// Materialize a MaterialComponent's in-graph texture (storage was deferred
+// in the node graph) into an image file next to the stage, so the USD
+// material network can reference it by path. Returns the written path, or
+// {} when there is no CPU texture to write. Function/procedural textures
+// are baked through their own sampling at a fixed resolution.
+static std::string materialize_texture_object(
+    const TextureObject& object,
+    const pxr::UsdStageRefPtr& stage)
+{
+    if (!object.has_cpu()) {
+        return {};
+    }
+
+#define RUZINO_TEXTURE_BAKE_RES 512
+    int width = RUZINO_TEXTURE_BAKE_RES;
+    int height = RUZINO_TEXTURE_BAKE_RES;
+    std::vector<float> rgba;
+    if (const auto* data =
+            dynamic_cast<const DataTexture2D*>(object.cpu.get())) {
+        width = std::max(1, data->get_width());
+        height = std::max(1, data->get_height());
+        rgba = data->get_data();
+        if (rgba.size() < size_t(width) * height * 4) {
+            rgba.resize(size_t(width) * height * 4, 0.0f);
+        }
+    }
+    else {
+        // FunctionTexture2D and friends: bake via their sampling.
+        rgba.resize(size_t(width) * height * 4, 0.0f);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                glm::vec4 c = object.cpu->sample_rgba_2d(
+                    glm::vec2(
+                        (float(x) + 0.5f) / float(width),
+                        (float(y) + 0.5f) / float(height)));
+                size_t i = (size_t(y) * width + x) * 4;
+                rgba[i + 0] = c.r;
+                rgba[i + 1] = c.g;
+                rgba[i + 2] = c.b;
+                rgba[i + 3] = c.a;
+            }
+        }
+    }
+#undef RUZINO_TEXTURE_BAKE_RES
+
+    // Write next to the stage (textures/ subdir); fall back to temp dir for
+    // memory-only stages.
+    std::filesystem::path out_dir;
+    const std::string layer_path =
+        stage ? stage->GetRootLayer()->GetRealPath() : std::string();
+    if (!layer_path.empty()) {
+        out_dir = std::filesystem::path(layer_path).parent_path() / "textures";
+    }
+    else {
+        out_dir = std::filesystem::temp_directory_path() / "ruzino_textures";
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(out_dir, ec);
+
+    // Content-derived file name (stable across runs, distinct per pixels) —
+    // get_material_path() can't be used here: it derives from textures[]
+    // which is only filled AFTER materialization.
+    std::uint64_t hash = 1469598103934665603ull;
+    const auto* bytes_view =
+        reinterpret_cast<const unsigned char*>(rgba.data());
+    for (size_t i = 0; i < rgba.size() * sizeof(float); ++i) {
+        hash ^= bytes_view[i];
+        hash *= 1099511628211ull;
+    }
+    char name_buf[48];
+    std::snprintf(
+        name_buf,
+        sizeof(name_buf),
+        "ingraph_%016llx.png",
+        static_cast<unsigned long long>(hash));
+    const std::filesystem::path out_path = out_dir / name_buf;
+
+    std::vector<unsigned char> bytes(rgba.size());
+    for (size_t i = 0; i < rgba.size(); ++i) {
+        bytes[i] = static_cast<unsigned char>(
+            glm::clamp(rgba[i], 0.0f, 1.0f) * 255.0f + 0.5f);
+    }
+    const int written = stbi_write_png(
+        out_path.string().c_str(), width, height, 4, bytes.data(), width * 4);
+    if (!written) {
+        spdlog::error(
+            "[material] Failed to write materialized texture: {}",
+            out_path.string());
+        return {};
+    }
+    spdlog::info(
+        "[material] Materialized in-graph texture ({}x{}) -> {}",
+        width,
+        height,
+        out_path.string());
+    return out_path.string();
+}
+
 bool write_geometry_to_usd(
     const Geometry& geometry,
     pxr::UsdStageRefPtr stage,
@@ -968,10 +1070,26 @@ bool write_geometry_to_usd(
     }
 
     // Handle materials
-    auto material_component = geometry.get_component<MaterialComponent>();
+    auto material_component = geom_copy.get_component<MaterialComponent>();
     if (material_component) {
+        // Storage was deferred in the node graph: materialize an in-graph
+        // CPU texture to disk now, then treat it like any file texture.
+        if (material_component->material_object.texture_object.has_cpu() &&
+            material_component->material_object.textures.empty()) {
+            auto materialized = materialize_texture_object(
+                material_component->material_object.texture_object, stage);
+            if (!materialized.empty()) {
+                material_component->material_object.textures.push_back(
+                    materialized);
+            }
+        }
         auto usdgeom = pxr::UsdGeomXformable::Get(stage, actual_path);
-        if (legal(std::string(material_component->textures[0].c_str()))) {
+        bool flat_color = !material_component->material_object.textured ||
+                          material_component->material_object.textures.empty();
+        if (flat_color ||
+            legal(
+                std::string(
+                    material_component->material_object.textures[0].c_str()))) {
             auto material_path = material_component->get_material_path();
             auto material =
                 material_component->define_material(stage, material_path);
@@ -1388,6 +1506,45 @@ bool write_geometry_as_over_spec(
             "[MODIFIER] Successfully wrote points over spec to '{}', count: {}",
             sdf_path.GetString(),
             verts.size());
+    }
+
+    // --- Material (common to all geometry types) ---
+    // Author the MaterialComponent's UsdPreviewSurface network and bind it,
+    // mirroring write_geometry_to_usd's material block. Everything lands in
+    // the modifier layer (the stage's edit target is switched for the
+    // duration) so the export stays non-destructive.
+    auto material_component = geom_copy.get_component<MaterialComponent>();
+    if (material_component) {
+        // Storage was deferred in the node graph: materialize an in-graph
+        // CPU texture to disk now, then treat it like any file texture.
+        if (material_component->material_object.texture_object.has_cpu() &&
+            material_component->material_object.textures.empty()) {
+            auto materialized = materialize_texture_object(
+                material_component->material_object.texture_object, stage);
+            if (!materialized.empty()) {
+                material_component->material_object.textures.push_back(
+                    materialized);
+            }
+        }
+        bool flat_color = !material_component->material_object.textured ||
+                          material_component->material_object.textures.empty();
+        bool texture_ok =
+            !flat_color &&
+            legal(
+                std::string(
+                    material_component->material_object.textures[0].c_str()));
+        if (flat_color || texture_ok) {
+            UsdEditTarget previous_target = stage->GetEditTarget();
+            stage->SetEditTarget(UsdEditTarget(modifier_layer));
+            auto material = material_component->define_material(
+                stage, material_component->get_material_path());
+            UsdPrim bound_prim = stage->GetPrimAtPath(sdf_path);
+            if (material && bound_prim) {
+                bound_prim.ApplyAPI(UsdShadeTokens->MaterialBindingAPI);
+                UsdShadeMaterialBindingAPI(bound_prim).Bind(material);
+            }
+            stage->SetEditTarget(previous_target);
+        }
     }
 
     return true;
