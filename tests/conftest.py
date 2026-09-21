@@ -6,22 +6,23 @@ Sets up paths and environment variables
 import sys
 import os
 
-# Get binary directory
-binary_dir = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "..", "Binaries", "Release"
+project_root = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
 )
-binary_dir = os.path.abspath(binary_dir)
+
+# RZ_BUILD_TYPE lets this suite run against Binaries/Debug (native debugging
+# with PDBs); fall back to Release when that build type isn't built. Mirrors
+# source/tests/conftest.py.
+_build_type = os.environ.get("RZ_BUILD_TYPE", "Release")
+binary_dir = os.path.abspath(os.path.join(project_root, "Binaries", _build_type))
+if not os.path.isdir(binary_dir):
+    binary_dir = os.path.abspath(os.path.join(project_root, "Binaries", "Release"))
 
 # All test outputs (.usdc) must live under Binaries/Release/test_output/geometry/.
 # Binaries/ is gitignored at the repo root, so nothing here enters the source
 # tree. Tests import this via `from conftest import OUTPUT_DIR`.
 OUTPUT_DIR = os.path.join(binary_dir, "test_output", "geometry")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-project_root = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
-)
-
 
 sys.path.append(binary_dir)
 if sys.platform == "win32":

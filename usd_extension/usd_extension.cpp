@@ -995,7 +995,9 @@ bool write_geometry_to_usd(
 
         usd_volume.MakeVisible(time);
     }
-    else {
+    else if (!instancer) {
+        // Instancer-only geometries fall through to the instancer
+        // block below (multi-prototype mode carries its own meshes).
         return false;
     }
 
@@ -1003,7 +1005,54 @@ bool write_geometry_to_usd(
     if (instancer) {
         auto instancer_component =
             pxr::UsdGeomPointInstancer::Define(stage, sdf_path);
-        instancer_component.CreatePrototypesRel().SetTargets({ actual_path });
+        const auto& prototypes = instancer->get_prototypes();
+        if (!prototypes.empty()) {
+            // Multi-prototype: each prototype becomes a child mesh of
+            // the instancer prim and the rel targets all of them.
+            std::vector<pxr::SdfPath> proto_paths;
+            proto_paths.reserve(prototypes.size());
+            for (size_t pi = 0; pi < prototypes.size(); ++pi) {
+                const auto& proto = prototypes[pi];
+                auto proto_path = sdf_path.AppendChild(
+                    pxr::TfToken("Prototype_" + std::to_string(pi)));
+                auto proto_mesh = pxr::UsdGeomMesh::Define(stage, proto_path);
+                if (proto_mesh) {
+                    proto_mesh.CreatePointsAttr().Set(
+                        vec3f_array_to_vt_array(proto.vertices), time);
+                    proto_mesh.CreateFaceVertexCountsAttr().Set(
+                        int_array_to_vt_array(proto.face_vertex_counts), time);
+                    proto_mesh.CreateFaceVertexIndicesAttr().Set(
+                        int_array_to_vt_array(proto.face_vertex_indices), time);
+                    if (!proto.normals.empty()) {
+                        proto_mesh.CreateNormalsAttr().Set(
+                            vec3f_array_to_vt_array(proto.normals), time);
+                        proto_mesh.SetNormalsInterpolation(
+                            pxr::UsdGeomTokens->vertex);
+                    }
+                    if (!proto.display_color.empty()) {
+                        auto primvars = pxr::UsdGeomPrimvarsAPI(proto_mesh);
+                        auto color_primvar = primvars.CreatePrimvar(
+                            pxr::TfToken("displayColor"),
+                            pxr::SdfValueTypeNames->Color3fArray);
+                        color_primvar.SetInterpolation(
+                            pxr::UsdGeomTokens->vertex);
+                        color_primvar.Set(
+                            vec3f_array_to_vt_array(proto.display_color), time);
+                    }
+                }
+                proto_paths.push_back(proto_path);
+            }
+            instancer_component.CreatePrototypesRel().SetTargets(proto_paths);
+        }
+        else {
+            // Legacy single-prototype mode prototypes the geometry's
+            // own mesh; without one there is nothing to instance.
+            if (!mesh) {
+                return false;
+            }
+            instancer_component.CreatePrototypesRel().SetTargets(
+                { actual_path });
+        }
 
         const auto& positions_glm = instancer->get_positions();
         const auto& orientations_glm = instancer->get_orientations();

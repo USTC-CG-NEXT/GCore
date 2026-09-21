@@ -20,6 +20,8 @@ GeometryComponentHandle InstancerComponent::copy(Geometry* operand) const
     instancer->orientations_ = orientations_;
     instancer->scales_ = scales_;
     instancer->has_rotations = has_rotations;
+    instancer->proto_indices_ = proto_indices_;
+    instancer->prototypes_ = prototypes_;
     return instancer;
 }
 
@@ -101,8 +103,22 @@ void InstancerComponent::reserve_instances(size_t count)
     scales_.reserve(count);
 }
 
+void InstancerComponent::set_proto_indices(
+    const std::vector<int>& proto_indices)
+{
+    assert(proto_indices.empty() || proto_indices.size() == positions_.size());
+    proto_indices_ = proto_indices;
+}
+
 pxr::VtArray<int> InstancerComponent::get_proto_indices() const
 {
+    // Real per-instance selection when provided; all-zero (prototype 0
+    // = the geometry's own mesh) keeps the legacy single-prototype
+    // contract.
+    if (proto_indices_.size() == positions_.size() && !positions_.empty()) {
+        return pxr::VtArray<int>(
+            proto_indices_.cbegin(), proto_indices_.cend());
+    }
     return pxr::VtArray<int>(positions_.size(), 0);
 }
 
