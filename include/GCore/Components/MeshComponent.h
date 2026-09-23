@@ -352,8 +352,9 @@ struct GEOMETRY_API MeshComponent : public GeometryComponent {
 
     // After adding these quantities, you need to modify the copy() function
 
-    // Quantities for polyscope
-    // Edge quantities are not supported because the indexing is not clear
+    // Named per-element quantities carried with the geometry; preserved by
+    // copy() Edge quantities are not supported because the indexing is not
+    // clear
     std::map<std::string, std::vector<float>> vertex_scalar_quantities;
     std::map<std::string, std::vector<float>> face_scalar_quantities;
     std::map<std::string, std::vector<glm::vec3>> vertex_vector_quantities;
