@@ -42,10 +42,10 @@ struct PickEvent {
 // window->events() bus under ViewportEvents::BRUSH_STATE. This is the
 // canonical payload type for that event (see GUI/viewport_events.h).
 struct ViewportBrushState {
-    glm::vec3 point{0.0f};   // current world position of the brush
-    float time = 0.0f;       // seconds since stroke start
-    bool active = false;     // pen is currently down
-    bool new_point = false;  // a new sample arrived since the last emit
+    glm::vec3 point{ 0.0f };  // current world position of the brush
+    float time = 0.0f;        // seconds since stroke start
+    bool active = false;      // pen is currently down
+    bool new_point = false;   // a new sample arrived since the last emit
 };
 
 struct GeomPayload {
@@ -67,6 +67,13 @@ struct GeomPayload {
     float delta_time = 0.0f;
     bool has_simulation = false;
     bool is_simulating = false;
+
+    // Gameplay input snapshot, filled by the stage from its InputState once
+    // per prim-graph cook (identical for every graph cooked in the same
+    // frame). Lets logic nodes branch on player input without pulling the
+    // input module into node plugins.
+    glm::vec2 move_axis = glm::vec2(0.0f);  // x = strafe (D+), y = forward (W+)
+    bool run_held = false;
 
     // Brush state from viewport interaction (updated every frame)
     glm::vec3 brush_point = glm::vec3(0.0f);  // current world position
