@@ -17,11 +17,6 @@ install(DIRECTORY ${GLM_INCLUDE_DIR}
     PATTERN "CMakeLists.txt" EXCLUDE
 )
 
-add_subdirectory(OpenMesh)
-set_target_properties(OpenMeshCore PROPERTIES FOLDER "external")
-set_target_properties(OpenMeshTools PROPERTIES FOLDER "external")
-target_compile_definitions(OpenMeshCore PUBLIC -D_USE_MATH_DEFINES=1)
-
 # libigl
 set(LIBIGL_RESTRICTED_TRIANGLE ON CACHE BOOL "" FORCE)
 add_subdirectory(libigl)
@@ -43,8 +38,6 @@ else()
 endif()
 set_target_properties(tetgen_geom PROPERTIES FOLDER "ThirdParty")
 
-set_target_properties(OpenMeshCore PROPERTIES FOLDER "ThirdParty")
-set_target_properties(OpenMeshTools PROPERTIES FOLDER "ThirdParty")
 set_target_properties(igl_core PROPERTIES FOLDER "ThirdParty")
 
 
@@ -52,13 +45,4 @@ set_target_properties(igl_core PROPERTIES FOLDER "ThirdParty")
 if(MSVC)
     target_compile_options(igl_core INTERFACE /wd4244 /wd4267)
     target_compile_options(triangle PRIVATE /wd4311 /wd4302)
-endif()
-
-add_subdirectory(OpenVolumeMesh)
-set_target_properties(OpenVolumeMesh PROPERTIES FOLDER "ThirdParty")
-set_target_properties(OpenVolumeMesh PROPERTIES ${OUTPUT_DIR})
-
-# suppress C4910 warnings for OpenVolumeMesh
-if(MSVC)
-    target_compile_options(OpenVolumeMesh PUBLIC /wd4910)
 endif()

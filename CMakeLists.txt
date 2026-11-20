@@ -1,3 +1,15 @@
+if(NOT TARGET OpenMeshCore)
+    find_package(OpenMesh CONFIG REQUIRED)
+endif()
+if(NOT TARGET OpenVolumeMesh::OpenVolumeMesh)
+    find_package(OpenVolumeMesh CONFIG REQUIRED)
+endif()
+
+target_compile_definitions(OpenMeshCore INTERFACE _USE_MATH_DEFINES)
+if(MSVC)
+    target_compile_options(OpenVolumeMesh::OpenVolumeMesh INTERFACE /wd4910)
+endif()
+
 add_subdirectory(external)
 
 
@@ -13,7 +25,7 @@ endif()
 RUZINO_ADD_LIB(
 	geometry
 	SHARED
-	PUBLIC_LIBS OpenMeshCore spdlog::spdlog igl_core triangle::triangle glm::glm OpenVolumeMesh tetgen_geom openvdb stb_image
+	PUBLIC_LIBS OpenMeshCore spdlog::spdlog igl_core triangle::triangle glm::glm OpenVolumeMesh::OpenVolumeMesh tetgen_geom openvdb stb_image
 	PYTHON_WRAP_DIR python
 	COMPILE_DEFS
 		NOMINMAX
